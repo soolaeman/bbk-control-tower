@@ -1,28 +1,30 @@
 ﻿# 🗼 BBKitchen Control Tower (ERP & Pricing Engine)
 
-> **Internal Operations, Pricing Engine, 14-Hub Warehouse Intelligence & Live Master Inventory Matrix.**
+> **Internal Operations, Pricing Engine, 14-Hub Warehouse Intelligence, RBAC Role Matrix & Live Master Inventory.**
 
 ---
 
-## 🕒 CURRENT CHECKPOINT — SESSION 1.0 SEALED
-
-- **Repository:** \bk-control-tower\ (\BBKitchenBTC\)
-- **Domain Code:** \BBK-CT\
-- **Tech Stack:** Next.js 15, TypeScript, Tailwind CSS, Google Sheets API
-- **Status:** 🔒 Operational Baseline Active & Sealed
+## 🛠️ Tech Stack & Engineering
+- **Framework:** Next.js 15 (App Router), TypeScript, Tailwind CSS
+- **Integrations:** Google Sheets API, Internal ERP REST endpoints, RBAC Matrix
+- **Core Engine:** Margin Calculator, 14-Hub Stock Aging, SEO Quality Checker (2,797 SKUs)
 
 ---
 
-## 🧭 Panduan Cepat
+## 🚀 Getting Started (Development)
+```bash
+# Install dependencies
+npm install
 
-| Kebutuhan | File / Path | Deskripsi |
-| :--- | :--- | :--- |
-| **Peta Navigasi** | [\NAVIGATOR.md\](NAVIGATOR.md) | Peta lengkap file & arsitektur proyek. |
-| **Notula Rapat** | [\docs/notes/\](docs/notes/README.md) | Notula koordinasi gudang & harga (\n_meeting BBK-CT\). |
-| **Rencana Teknis** | [\docs/plans/\](docs/plans/README.md) | Dokumen arsitektur & RFC. |
-| **Arsip Progress** | [\docs/progress/\](docs/progress/README.md) | Riwayat sesi koding (\n_start BBK-CT\). |
+# Run local development server
+npm run dev
+```
+
+Buka [http://localhost:3000](http://localhost:3000) pada browser Anda.
 
 ---
 
-## 👑 Integrasi Holding Cockpit
-Dikendalikan terpusat melalui **J.A.R.V.I.S. Sovereign Holding Matrix** (\BBK-CT\).
+## 🧭 Navigasi & Dokumentasi
+- 📈 **Sesi Koding Teknis:** [`docs/progress/README.md`](docs/progress/README.md) (`fn_start BBK-CT` / `fn_close`)
+- 🗺️ **Peta File & Arsitektur:** [`NAVIGATOR.md`](NAVIGATOR.md)
+- 👑 **Hub Strategi Bisnis Terpusat:** [`Jarvis-OS/domains/business/bbkitchen/`](../Jarvis-OS/domains/business/bbkitchen/README.md)
