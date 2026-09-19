@@ -15,10 +15,27 @@ import {
 } from './google-sheets-invoices';
 import { resolveLocationFromCode, resolveHubCode } from './warehouse-utils';
 
+import {
+  fetchTursoInvoices,
+  saveTursoInvoice,
+  updateTursoInvoiceStatus as updateTursoStatus,
+  deleteTursoInvoice as deleteTursoInv,
+} from './turso-finance-repository';
+
 // Clean Real Invoices store for BBKitchen (in-memory cache)
 let cachedInvoices: Invoice[] = [];
 
 export async function getInvoices(): Promise<Invoice[]> {
+  try {
+    const tursoInvoices = await fetchTursoInvoices();
+    if (tursoInvoices && tursoInvoices.length > 0) {
+      cachedInvoices = tursoInvoices;
+      return cachedInvoices;
+    }
+  } catch (err) {
+    console.warn('Fallback from Turso to Google Sheets:', err);
+  }
+
   try {
     const sheetsInvoices = await fetchGoogleSheetsInvoices();
     if (sheetsInvoices && sheetsInvoices.length > 0) {
@@ -38,7 +55,12 @@ export async function createInvoice(invoiceData: Omit<Invoice, 'id'>): Promise<I
   };
   cachedInvoices.unshift(newInvoice);
 
-  // Persist to Google Sheets INVOICE_ARCHIVE tab
+  // Persist to Turso Edge Database
+  await saveTursoInvoice(newInvoice).catch((e) =>
+    console.warn('Turso invoice save warning:', e)
+  );
+
+  // Persist to Google Sheets INVOICE_ARCHIVE tab (legacy fallback)
   await appendGoogleSheetsInvoice(newInvoice).catch((e) =>
     console.warn('Google Sheets invoice append warning:', e)
   );
@@ -56,7 +78,12 @@ export async function updateInvoice(invoice: Invoice): Promise<Invoice> {
     cachedInvoices.unshift(invoice);
   }
 
-  // Persist full update to Google Sheets
+  // Persist full update to Turso Edge Database
+  await saveTursoInvoice(invoice).catch((e) =>
+    console.warn('Turso invoice update warning:', e)
+  );
+
+  // Persist full update to Google Sheets (legacy fallback)
   await updateGoogleSheetsInvoice(invoice).catch((e) =>
     console.warn('Google Sheets full invoice update warning:', e)
   );
@@ -73,7 +100,12 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
     }
   }
 
-  // Persist status update to Google Sheets
+  // Persist status update to Turso Edge Database
+  await updateTursoStatus(id, status).catch((e) =>
+    console.warn('Turso invoice status update warning:', e)
+  );
+
+  // Persist status update to Google Sheets (legacy fallback)
   await updateGoogleSheetsInvoiceStatus(
     id,
     status,
@@ -86,6 +118,11 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
 export async function deleteInvoice(idOrNumber: string): Promise<boolean> {
   cachedInvoices = cachedInvoices.filter(
     (inv) => inv.id !== idOrNumber && inv.invoiceNumber !== idOrNumber
+  );
+
+  // Persist deletion to Turso Edge Database
+  await deleteTursoInv(idOrNumber).catch((e) =>
+    console.warn('Turso invoice deletion warning:', e)
   );
 
   await deleteGoogleSheetsInvoice(idOrNumber).catch((e) =>
