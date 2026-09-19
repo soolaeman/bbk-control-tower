@@ -1,4 +1,4 @@
-﻿# 🗼 BBKitchen Control Tower — Progress & Session Archive
+# 🗼 BBKitchen Control Tower — Progress & Session Archive
 
 > **Domain Code:** \BBK-CT\  
 > **Status:** 🔒 **Legacy Milestone Sealed (\CHAT-1.0\)**  
@@ -15,6 +15,6 @@
 
 ## 📊 Indeks Sesi Historis
 
-| Session | Focus | Commits | Status | Archive |
-|---|---|---|---|---|
-| **01 (1.0)** | Live 2,797 SKU SEO Suite, 14 Hubs Warehouse Aging, RBAC Role Matrix & Next 15 Build | 30+ Commits | ✅ Closed | [\CHAT-1.0.md\](./CHAT-1.0.md) |
+| Sesi | File Ledger | Waktu / Tanggal | Durasi | Man-Month | Fokus Utama | Commits | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **01 (1.0)** | [`CHAT-1.0.md`](./CHAT-1.0.md) | 2026-09-08 s/d 2026-09-17 18:30 WIB | Baseline Archive | 0.030 MM | Live 2,797 SKU SEO Suite, 14 Hubs Warehouse Aging, RBAC Role Matrix & Next 15 Build | 30+ | 🔒 Sealed |
