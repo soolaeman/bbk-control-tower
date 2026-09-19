@@ -12,9 +12,11 @@
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@hookform/resolvers": "^5.2.1",
+    "@libsql/client": "^0.18.0",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "googleapis": "^153.0.0",
     "lucide-react": "^0.553.0",
     "motion": "^12.23.24",
     "next": "^15.5.24",
@@ -22,8 +24,7 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "recharts": "^3.10.1",
-    "tailwind-merge": "^3.3.1",
-    "googleapis": "^153.0.0"
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.11",

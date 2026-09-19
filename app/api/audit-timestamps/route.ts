@@ -11,12 +11,18 @@ import {
   removePendingSoldReport,
 } from '@/lib/repositories/sold-reports-repository';
 
+import {
+  getTursoTelegramSoldRadarCandidates,
+  dismissSoldRadarCandidate,
+} from '@/lib/repositories/turso-inventory-repository';
+
 export type { SoldNotice };
 
 export async function GET() {
-  const [state, sheetReports] = await Promise.all([
+  const [state, sheetReports, radarCandidates] = await Promise.all([
     getPersistentAuditState(),
     getPendingSoldReports().catch(() => []),
+    getTursoTelegramSoldRadarCandidates().catch(() => []),
   ]);
 
   // Convert sheet reports directly from LAPORAN_TERJUAL sheet
@@ -29,10 +35,13 @@ export async function GET() {
     reportedBy: r.reportedBy || 'Sales',
   }));
 
+  // Combine sheet reports and radar candidates
+  const allNotices: SoldNotice[] = [...mappedNotices, ...radarCandidates];
+
   return NextResponse.json({
     timestamps: state.timestamps,
     activeSku: state.activeSku,
-    soldNotices: mappedNotices,
+    soldNotices: allNotices,
   });
 }
 
@@ -89,6 +98,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (targetSku) {
+        dismissSoldRadarCandidate(targetSku);
         await removePendingSoldReport(targetSku).catch((err) =>
           console.warn(`Could not delete row from LAPORAN_TERJUAL for SKU ${targetSku}:`, err)
         );

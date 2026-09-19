@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { queryInventory, markUnitAsSold } from '@/lib/repositories/inventory-repository';
 import { UserRole } from '@/lib/types/auth';
 import { queryGoogleSheetsInventory, updateGoogleSheetsStockStatus } from '@/lib/repositories/google-sheets-inventory';
+import { queryTursoInventory, updateTursoStockStatus } from '@/lib/repositories/turso-inventory-repository';
 import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {
@@ -31,6 +32,33 @@ export async function GET(request: NextRequest) {
     const roleHeader = session.user.role as UserRole;
 
     const rawSource = (process.env.BBK_INVENTORY_SOURCE || '').replace(/['"]/g, '').trim().toLowerCase();
+    const hasTursoConfig = Boolean(process.env.TURSO_DATABASE_URL || process.env.TURSO_AUTH_TOKEN);
+    const isTurso = rawSource === 'turso' || (rawSource !== 'google_sheets' && rawSource !== 'mock' && hasTursoConfig);
+
+    if (isTurso) {
+      const result = await queryTursoInventory(
+        {
+          search,
+          category,
+          location,
+          warehouse,
+          statusUnit,
+          statusPipeline,
+          guardrailStatus,
+          isDirty,
+          hasProductId,
+          minPrice,
+          maxPrice,
+          sortBy,
+          sortOrder,
+          page,
+          pageSize,
+        },
+        roleHeader
+      );
+      return NextResponse.json(result);
+    }
+
     const hasSheetsConfig = Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
     const isGoogleSheets = rawSource === 'google_sheets' || (rawSource !== 'mock' && hasSheetsConfig);
 
@@ -109,10 +137,30 @@ export async function POST(request: NextRequest) {
     }
 
     const rawSource = (process.env.BBK_INVENTORY_SOURCE || '').replace(/['"]/g, '').trim().toLowerCase();
-    const hasSheetsConfig = Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
-    const isGoogleSheets = rawSource === 'google_sheets' || (rawSource !== 'mock' && hasSheetsConfig);
+    const hasTursoConfig = Boolean(process.env.TURSO_DATABASE_URL || process.env.TURSO_AUTH_TOKEN);
+    const isTurso = rawSource === 'turso' || (rawSource !== 'google_sheets' && rawSource !== 'mock' && hasTursoConfig);
 
-    if (action === 'MARK_AS_SOLD' || status === 'SOLD') {
+    if (action === 'MARK_AS_SOLD' || status === 'SOLD' || action === 'UPDATE_STOCK_STATUS') {
+      if (isTurso) {
+        const tursoResult = await updateTursoStockStatus(
+          sku,
+          (status as any) || 'SOLD',
+          dealPrice ? Number(dealPrice) : undefined,
+          notes
+        );
+        if (!tursoResult.success) {
+          return NextResponse.json({ error: tursoResult.error }, { status: 404 });
+        }
+        return NextResponse.json({
+          success: true,
+          item: tursoResult.item,
+          message: `Unit ${sku} successfully updated to ${(status as any) || 'SOLD'} in Turso`,
+        });
+      }
+
+      const hasSheetsConfig = Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+      const isGoogleSheets = rawSource === 'google_sheets' || (rawSource !== 'mock' && hasSheetsConfig);
+
       if (isGoogleSheets) {
         const gsResult = await updateGoogleSheetsStockStatus({
           sku,
@@ -140,6 +188,21 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'MARK_AS_READY' || status === 'READY') {
+      if (isTurso) {
+        const tursoResult = await updateTursoStockStatus(sku, 'READY', undefined, notes);
+        if (!tursoResult.success) {
+          return NextResponse.json({ error: tursoResult.error }, { status: 404 });
+        }
+        return NextResponse.json({
+          success: true,
+          item: tursoResult.item,
+          message: `Unit ${sku} successfully set to READY in Turso`,
+        });
+      }
+
+      const hasSheetsConfig = Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+      const isGoogleSheets = rawSource === 'google_sheets' || (rawSource !== 'mock' && hasSheetsConfig);
+
       if (isGoogleSheets) {
         const gsResult = await updateGoogleSheetsStockStatus({
           sku,
