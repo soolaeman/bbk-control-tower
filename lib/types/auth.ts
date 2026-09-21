@@ -42,117 +42,251 @@ export interface UserSession {
 }
 
 export interface RolePermissions {
-  canViewInternalCost: boolean;
-  canViewFloorPrice: boolean;
-  canViewDealPrice: boolean;
-  canViewTelegramLink: boolean;
-  canViewSupplierData: boolean;
-  canMarkAsSold: boolean;
-  canEditInventory: boolean;
-  canManageInvoices: boolean;
-  canViewFinanceReports: boolean;
-  canEditSEO: boolean;
-  canManageSocialMedia: boolean;
-  canViewRawAnalytics: boolean;
-  canAccessInvestorPortal: boolean;
-  isInvestorRestricted: boolean;
+  // 1. Executive Overview
+  canViewOverview?: boolean;
+  canEditOverview?: boolean;
+
+  // 2. Master Inventory
+  canViewInventory?: boolean;
+  canEditInventory?: boolean;
+
+  // 3. Sales & WA Pitch
+  canViewSalesPitch?: boolean;
+  canEditSalesPitch?: boolean;
+
+  // 4. Pipeline & QC Funnel
+  canViewPipeline?: boolean;
+  canEditPipeline?: boolean;
+
+  // 5. Invoices & Dokumen Resmi
+  canViewInvoices?: boolean;
+  canEditInvoices?: boolean;
+
+  // 6. Financials & Cashflow
+  canViewFinancials?: boolean;
+  canEditFinancials?: boolean;
+
+  // 7. Warehouse Intelligence
+  canViewWarehouses?: boolean;
+  canEditWarehouses?: boolean;
+
+  // 8. SEO Quality & Schema
+  canViewSEO?: boolean;
+  canEditSEO?: boolean;
+
+  // 9. Social Distribution
+  canViewSocial?: boolean;
+  canEditSocial?: boolean;
+
+  // Legacy / Granular Data Protection Keys
+  canViewInternalCost?: boolean;
+  canViewFloorPrice?: boolean;
+  canViewDealPrice?: boolean;
+  canViewTelegramLink?: boolean;
+  canViewSupplierData?: boolean;
+  canMarkAsSold?: boolean;
+  canManageInvoices?: boolean;
+  canViewFinanceReports?: boolean;
+  canManageSocialMedia?: boolean;
+  canViewRawAnalytics?: boolean;
+  canAccessInvestorPortal?: boolean;
+  isInvestorRestricted?: boolean;
+
+  // Extensible index signature for infinite future tabs & complex filters
+  [key: string]: boolean | string[] | number | undefined;
 }
 
 export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
   ADMIN: {
+    canViewOverview: true,
+    canEditOverview: true,
+    canViewInventory: true,
+    canEditInventory: true,
+    canViewSalesPitch: true,
+    canEditSalesPitch: true,
+    canViewPipeline: true,
+    canEditPipeline: true,
+    canViewInvoices: true,
+    canEditInvoices: true,
+    canViewFinancials: true,
+    canEditFinancials: true,
+    canViewWarehouses: true,
+    canEditWarehouses: true,
+    canViewSEO: true,
+    canEditSEO: true,
+    canViewSocial: true,
+    canEditSocial: true,
     canViewInternalCost: true,
     canViewFloorPrice: true,
     canViewDealPrice: true,
     canViewTelegramLink: true,
     canViewSupplierData: true,
     canMarkAsSold: true,
-    canEditInventory: true,
     canManageInvoices: true,
     canViewFinanceReports: true,
-    canEditSEO: true,
     canManageSocialMedia: true,
     canViewRawAnalytics: true,
     canAccessInvestorPortal: true,
     isInvestorRestricted: false,
   },
-  OPERATOR: {
-    canViewInternalCost: false,
-    canViewFloorPrice: true,
-    canViewDealPrice: true,
-    canViewTelegramLink: true,
-    canViewSupplierData: false,
-    canMarkAsSold: true,
-    canEditInventory: true,
-    canManageInvoices: false,
-    canViewFinanceReports: false,
-    canEditSEO: false,
-    canManageSocialMedia: false,
-    canViewRawAnalytics: false,
-    canAccessInvestorPortal: false,
-    isInvestorRestricted: false,
-  },
-  MARKETING: {
-    canViewInternalCost: false,
-    canViewFloorPrice: false,
-    canViewDealPrice: false,
-    canViewTelegramLink: false,
-    canViewSupplierData: false,
-    canMarkAsSold: false,
-    canEditInventory: false,
-    canManageInvoices: false,
-    canViewFinanceReports: false,
-    canEditSEO: true,
-    canManageSocialMedia: true,
-    canViewRawAnalytics: true,
-    canAccessInvestorPortal: false,
-    isInvestorRestricted: false,
-  },
   FINANCE: {
+    canViewOverview: true,
+    canEditOverview: false,
+    canViewInventory: true,
+    canEditInventory: false,
+    canViewSalesPitch: true,
+    canEditSalesPitch: true,
+    canViewPipeline: false,
+    canEditPipeline: false,
+    canViewInvoices: true,
+    canEditInvoices: true,
+    canViewFinancials: true,
+    canEditFinancials: true,
+    canViewWarehouses: false,
+    canEditWarehouses: false,
+    canViewSEO: false,
+    canEditSEO: false,
+    canViewSocial: false,
+    canEditSocial: false,
     canViewInternalCost: true,
     canViewFloorPrice: true,
     canViewDealPrice: true,
     canViewTelegramLink: false,
     canViewSupplierData: false,
     canMarkAsSold: false,
-    canEditInventory: false,
     canManageInvoices: true,
     canViewFinanceReports: true,
-    canEditSEO: false,
     canManageSocialMedia: false,
     canViewRawAnalytics: false,
     canAccessInvestorPortal: false,
     isInvestorRestricted: false,
   },
-  VIEWER: {
+  OPERATOR: {
+    canViewOverview: false,
+    canEditOverview: false,
+    canViewInventory: true,
+    canEditInventory: true,
+    canViewSalesPitch: true,
+    canEditSalesPitch: true,
+    canViewPipeline: true,
+    canEditPipeline: true,
+    canViewInvoices: false,
+    canEditInvoices: false,
+    canViewFinancials: false,
+    canEditFinancials: false,
+    canViewWarehouses: true,
+    canEditWarehouses: true,
+    canViewSEO: false,
+    canEditSEO: false,
+    canViewSocial: false,
+    canEditSocial: false,
+    canViewInternalCost: false,
+    canViewFloorPrice: true,
+    canViewDealPrice: true,
+    canViewTelegramLink: true,
+    canViewSupplierData: false,
+    canMarkAsSold: true,
+    canManageInvoices: false,
+    canViewFinanceReports: false,
+    canManageSocialMedia: false,
+    canViewRawAnalytics: false,
+    canAccessInvestorPortal: false,
+    isInvestorRestricted: false,
+  },
+  MARKETING: {
+    canViewOverview: false,
+    canEditOverview: false,
+    canViewInventory: true,
+    canEditInventory: false,
+    canViewSalesPitch: false,
+    canEditSalesPitch: false,
+    canViewPipeline: false,
+    canEditPipeline: false,
+    canViewInvoices: false,
+    canEditInvoices: false,
+    canViewFinancials: false,
+    canEditFinancials: false,
+    canViewWarehouses: false,
+    canEditWarehouses: false,
+    canViewSEO: true,
+    canEditSEO: true,
+    canViewSocial: true,
+    canEditSocial: true,
     canViewInternalCost: false,
     canViewFloorPrice: false,
     canViewDealPrice: false,
     canViewTelegramLink: false,
     canViewSupplierData: false,
     canMarkAsSold: false,
-    canEditInventory: false,
     canManageInvoices: false,
     canViewFinanceReports: false,
-    canEditSEO: false,
-    canManageSocialMedia: false,
+    canManageSocialMedia: true,
     canViewRawAnalytics: true,
     canAccessInvestorPortal: false,
     isInvestorRestricted: false,
   },
   INVESTOR: {
+    canViewOverview: true,
+    canEditOverview: false,
+    canViewInventory: false,
+    canEditInventory: false,
+    canViewSalesPitch: false,
+    canEditSalesPitch: false,
+    canViewPipeline: false,
+    canEditPipeline: false,
+    canViewInvoices: false,
+    canEditInvoices: false,
+    canViewFinancials: true,
+    canEditFinancials: false,
+    canViewWarehouses: false,
+    canEditWarehouses: false,
+    canViewSEO: false,
+    canEditSEO: false,
+    canViewSocial: false,
+    canEditSocial: false,
     canViewInternalCost: false,
     canViewFloorPrice: false,
     canViewDealPrice: false,
     canViewTelegramLink: false,
     canViewSupplierData: false,
     canMarkAsSold: false,
-    canEditInventory: false,
     canManageInvoices: false,
     canViewFinanceReports: true,
-    canEditSEO: false,
     canManageSocialMedia: false,
     canViewRawAnalytics: true,
     canAccessInvestorPortal: true,
-    isInvestorRestricted: true, // Specifically blocks SKU-level cost and individual supplier details
+    isInvestorRestricted: true,
+  },
+  VIEWER: {
+    canViewOverview: false,
+    canEditOverview: false,
+    canViewInventory: true,
+    canEditInventory: false,
+    canViewSalesPitch: false,
+    canEditSalesPitch: false,
+    canViewPipeline: false,
+    canEditPipeline: false,
+    canViewInvoices: false,
+    canEditInvoices: false,
+    canViewFinancials: false,
+    canEditFinancials: false,
+    canViewWarehouses: false,
+    canEditWarehouses: false,
+    canViewSEO: false,
+    canEditSEO: false,
+    canViewSocial: false,
+    canEditSocial: false,
+    canViewInternalCost: false,
+    canViewFloorPrice: false,
+    canViewDealPrice: false,
+    canViewTelegramLink: false,
+    canViewSupplierData: false,
+    canMarkAsSold: false,
+    canManageInvoices: false,
+    canViewFinanceReports: false,
+    canManageSocialMedia: false,
+    canViewRawAnalytics: true,
+    canAccessInvestorPortal: false,
+    isInvestorRestricted: false,
   },
 };

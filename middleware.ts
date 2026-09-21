@@ -84,19 +84,19 @@ export default auth((request) => {
     let isAllowed = true;
 
     if (pathname.startsWith("/api/finance")) {
-      isAllowed = Boolean(permissions?.canViewFinanceReports);
+      isAllowed = Boolean(permissions?.canViewFinancials || permissions?.canEditFinancials || permissions?.canViewFinanceReports);
     } else if (pathname.startsWith("/api/invoices")) {
-      isAllowed = Boolean(permissions?.canManageInvoices);
+      isAllowed = Boolean(permissions?.canViewInvoices || permissions?.canEditInvoices || permissions?.canManageInvoices);
     } else if (pathname.startsWith("/api/inventory")) {
-      isAllowed = Boolean(permissions?.canViewFloorPrice || permissions?.canEditInventory);
+      isAllowed = Boolean(permissions?.canViewInventory || permissions?.canEditInventory || permissions?.canViewFloorPrice);
     } else if (pathname.startsWith("/api/pipeline")) {
-      isAllowed = Boolean(permissions?.canEditInventory);
+      isAllowed = Boolean(permissions?.canViewPipeline || permissions?.canEditPipeline || permissions?.canEditInventory);
     } else if (pathname.startsWith("/api/sales-helper")) {
-      isAllowed = Boolean(permissions?.canViewDealPrice || permissions?.canViewFloorPrice);
+      isAllowed = Boolean(permissions?.canViewSalesPitch || permissions?.canEditSalesPitch || permissions?.canViewDealPrice || permissions?.canViewFloorPrice);
     } else if (pathname.startsWith("/api/seo")) {
-      isAllowed = Boolean(permissions?.canEditSEO);
+      isAllowed = Boolean(permissions?.canViewSEO || permissions?.canEditSEO);
     } else if (pathname.startsWith("/api/analytics")) {
-      isAllowed = Boolean(permissions?.canViewRawAnalytics || permissions?.canViewFinanceReports);
+      isAllowed = Boolean(permissions?.canViewOverview || permissions?.canViewRawAnalytics || permissions?.canViewFinanceReports);
     }
 
     if (!isAllowed) {

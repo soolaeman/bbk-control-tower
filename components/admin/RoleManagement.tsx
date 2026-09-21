@@ -28,15 +28,15 @@ const CAPABILITIES: Array<{
   editKey?: keyof RolePermissions;
   desc: string;
 }> = [
-  { label: 'Executive Overview', viewKey: 'canViewFinanceReports', editKey: 'canViewFinanceReports', desc: 'Ringkasan finansial' },
-  { label: 'Master Inventory', viewKey: 'canViewFloorPrice', editKey: 'canEditInventory', desc: 'Katalog unit & harga' },
-  { label: 'Sales & WA Pitch', viewKey: 'canViewDealPrice', editKey: 'canViewDealPrice', desc: 'Penawaran deal WA' },
-  { label: 'Pipeline & QC Funnel', viewKey: 'canEditInventory', editKey: 'canEditInventory', desc: 'Alur QC & perbaikan' },
-  { label: 'Invoices & Dokumen', viewKey: 'canManageInvoices', editKey: 'canManageInvoices', desc: 'Penagihan & Surat Jalan' },
-  { label: 'Financials & Cashflow', viewKey: 'canViewFinanceReports', editKey: 'canViewFinanceReports', desc: 'Buku kas & laba kotor' },
-  { label: 'Warehouse Intelligence', viewKey: 'canViewSupplierData', editKey: 'canViewSupplierData', desc: 'Data suplier & gudang' },
-  { label: 'SEO & Schema', viewKey: 'canEditSEO', editKey: 'canEditSEO', desc: 'Meta tag & katalog publik' },
-  { label: 'Social Distribution', viewKey: 'canManageSocialMedia', editKey: 'canManageSocialMedia', desc: 'Kanal sosmed & blast' },
+  { label: 'Executive Overview', viewKey: 'canViewOverview', editKey: 'canEditOverview', desc: 'Ringkasan finansial' },
+  { label: 'Master Inventory', viewKey: 'canViewInventory', editKey: 'canEditInventory', desc: 'Katalog unit & harga' },
+  { label: 'Sales & WA Pitch', viewKey: 'canViewSalesPitch', editKey: 'canEditSalesPitch', desc: 'Penawaran deal WA' },
+  { label: 'Pipeline & QC Funnel', viewKey: 'canViewPipeline', editKey: 'canEditPipeline', desc: 'Alur QC & perbaikan' },
+  { label: 'Invoices & Dokumen', viewKey: 'canViewInvoices', editKey: 'canEditInvoices', desc: 'Penagihan & Surat Jalan' },
+  { label: 'Financials & Cashflow', viewKey: 'canViewFinancials', editKey: 'canEditFinancials', desc: 'Buku kas & laba kotor' },
+  { label: 'Warehouse Intelligence', viewKey: 'canViewWarehouses', editKey: 'canEditWarehouses', desc: 'Data suplier & gudang' },
+  { label: 'SEO & Schema', viewKey: 'canViewSEO', editKey: 'canEditSEO', desc: 'Meta tag & katalog publik' },
+  { label: 'Social Distribution', viewKey: 'canViewSocial', editKey: 'canEditSocial', desc: 'Kanal sosmed & blast' },
 ];
 
 export function RoleManagement() {
@@ -281,9 +281,29 @@ export function RoleManagement() {
     });
   };
 
-  const toggleView = (roleId: string, viewKey: keyof RolePermissions, currentVal: boolean) => {
+  const toggleView = (
+    roleId: string,
+    viewKey: keyof RolePermissions,
+    editKey: keyof RolePermissions | undefined,
+    currentVal: boolean
+  ) => {
+    if (roleId === 'ADMIN') return;
     const nextVal = !currentVal;
-    togglePermission(roleId, viewKey, nextVal);
+    setPermissionsMatrix((prev) => {
+      const currentRolePerms = prev[roleId] || { ...ROLE_PERMISSIONS.VIEWER };
+      const updated: RolePermissions = {
+        ...currentRolePerms,
+        [viewKey]: nextVal,
+      };
+      // If View is disabled, Edit must also be disabled
+      if (!nextVal && editKey) {
+        (updated as any)[editKey] = false;
+      }
+      return {
+        ...prev,
+        [roleId]: updated,
+      };
+    });
   };
 
   const toggleEdit = (
@@ -292,25 +312,51 @@ export function RoleManagement() {
     editKey: keyof RolePermissions,
     currentVal: boolean
   ) => {
+    if (roleId === 'ADMIN') return;
     const nextVal = !currentVal;
-    togglePermission(roleId, editKey, nextVal);
-    // If edit is enabled, view must be enabled
-    if (nextVal) {
-      togglePermission(roleId, viewKey, true);
-    }
+    setPermissionsMatrix((prev) => {
+      const currentRolePerms = prev[roleId] || { ...ROLE_PERMISSIONS.VIEWER };
+      const updated: RolePermissions = {
+        ...currentRolePerms,
+        [editKey]: nextVal,
+      };
+      // If Edit is enabled, View must also be enabled
+      if (nextVal) {
+        (updated as any)[viewKey] = true;
+      }
+      return {
+        ...prev,
+        [roleId]: updated,
+      };
+    });
   };
 
-  // Save Permissions Matrix to Turso DB
+  // Save Permissions Matrix to Turso DB with legacy sync bridge
   const handleSaveMatrix = async () => {
     try {
       setSavingMatrix(true);
       setFeedback(null);
+
+      // Synchronize legacy keys to keep older UI components & APIs functional
+      const enrichedMatrix: Record<string, RolePermissions> = {};
+      Object.entries(permissionsMatrix).forEach(([roleId, perms]) => {
+        enrichedMatrix[roleId] = {
+          ...perms,
+          canViewFinanceReports: Boolean(perms.canViewOverview || perms.canViewFinancials || perms.canViewFinanceReports),
+          canManageInvoices: Boolean(perms.canViewInvoices || perms.canEditInvoices || perms.canManageInvoices),
+          canViewFloorPrice: Boolean(perms.canViewInventory || perms.canViewFloorPrice),
+          canViewDealPrice: Boolean(perms.canViewSalesPitch || perms.canViewDealPrice),
+          canViewSupplierData: Boolean(perms.canViewWarehouses || perms.canViewSupplierData),
+          canManageSocialMedia: Boolean(perms.canViewSocial || perms.canEditSocial || perms.canManageSocialMedia),
+        };
+      });
+
       const res = await fetch('/api/roles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'SAVE_PERMISSIONS_MATRIX',
-          matrix: permissionsMatrix,
+          matrix: enrichedMatrix,
         }),
       });
 
@@ -319,7 +365,7 @@ export function RoleManagement() {
 
       setFeedback({
         type: 'success',
-        message: 'Matriks hak akses berhasil disimpan ke Turso Cloud DB SSOT!',
+        message: 'Matriks hak akses modular berhasil disimpan ke Turso Cloud DB SSOT!',
       });
       notifyChange();
     } catch (err: any) {
@@ -726,7 +772,7 @@ export function RoleManagement() {
                             <button
                               type="button"
                               disabled={isOwner}
-                              onClick={() => toggleView(r.id, cap.viewKey, canView)}
+                              onClick={() => toggleView(r.id, cap.viewKey, cap.editKey, canView)}
                               className={`rounded-lg p-1.5 transition-colors ${
                                 isOwner
                                   ? 'cursor-not-allowed opacity-50'
