@@ -85,7 +85,8 @@ interface AuditSummaryData {
 }
 
 export function SEOQualityControl() {
-  const { role } = useAuth();
+  const { role, permissions } = useAuth();
+  const canEdit = role === 'ADMIN' || Boolean(permissions?.canEditSEO);
   const [activeTab, setActiveTab] = useState<PillarTab>('OVERVIEW');
 
   // Aggregated Inventory SEO State
@@ -461,27 +462,29 @@ export function SEOQualityControl() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleBatchAutofix}
-            disabled={isBatchFixing}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition-all"
-            title="Optimasi otomatis Yoast Meta, Title, dan Image Alt pada seluruh unit yang belum lengkap"
-          >
-            <Sparkles className={`w-3.5 h-3.5 ${isBatchFixing ? 'animate-spin' : ''}`} />
-            <span>{isBatchFixing ? 'Mengoptimasi...' : '1-Klik Batch Autofix Semua SKU'}</span>
-          </button>
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBatchAutofix}
+              disabled={isBatchFixing}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition-all"
+              title="Optimasi otomatis Yoast Meta, Title, dan Image Alt pada seluruh unit yang belum lengkap"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isBatchFixing ? 'animate-spin' : ''}`} />
+              <span>{isBatchFixing ? 'Mengoptimasi...' : '1-Klik Batch Autofix Semua SKU'}</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setShowNewArticleModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Buat Artikel Baru</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setShowNewArticleModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Buat Artikel Baru</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {batchFixSuccessMsg && (

@@ -58,7 +58,8 @@ interface InvoiceManagerProps {
 }
 
 export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps = {}) {
-  const { role } = useAuth();
+  const { role, permissions } = useAuth();
+  const canEdit = role === 'ADMIN' || Boolean(permissions?.canEditInvoices);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -733,35 +734,37 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-amber-500' : ''}`} />
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setEditingInvoice(null);
-              setFormDocType('INVOICE');
-              setCustomerName('');
-              setCustomerPhone('');
-              setCustomerAddress('');
-              setCustomerCompany('');
-              setItemRows([{ id: 'item_1', sku: '', description: '', quantity: 1, unitPrice: 0 }]);
-              setDiscount('0');
-              setPayments([
-                {
-                  id: 'pay_1',
-                  label: 'Pembayaran 1 (DP)',
-                  amount: 0,
-                  date: new Date().toISOString().split('T')[0],
-                  method: 'TRANSFER_JAGO_SYARIAH',
-                },
-              ]);
-              setHasShippingDetails(false);
-              setNotes('');
-              setShowCreateModal(true);
-            }}
-            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow-lg shadow-amber-950/50 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>+ Terbitkan Dokumen Baru</span>
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingInvoice(null);
+                setFormDocType(commercialSubTab === 'QUOTATIONS' ? 'QUOTATION' : 'INVOICE');
+                setCustomerName('');
+                setCustomerPhone('');
+                setCustomerAddress('');
+                setCustomerCompany('');
+                setItemRows([{ id: 'item_1', sku: '', description: '', quantity: 1, unitPrice: 0 }]);
+                setDiscount('0');
+                setPayments([
+                  {
+                    id: 'pay_1',
+                    label: 'Pembayaran 1 (DP)',
+                    amount: 0,
+                    date: new Date().toISOString().split('T')[0],
+                    method: 'TRANSFER_JAGO_SYARIAH',
+                  },
+                ]);
+                setHasShippingDetails(false);
+                setNotes('');
+                setShowCreateModal(true);
+              }}
+              className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow-lg shadow-amber-950/50 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>+ Terbitkan Dokumen Baru</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1000,165 +1003,175 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
                                 <Printer className="w-3.5 h-3.5" />
                                 <span>Quotation</span>
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => handleConvertQuotationToInvoice(inv)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-md transition-colors"
-                                title="Ambil penawaran ini dan buat menjadi Faktur Invoice Resmi"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Ambil ke Invoice</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(inv)}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors"
-                                title="Edit penawaran harga"
-                              >
-                                <Pencil className="w-3 h-3 text-amber-400" />
-                                <span>Edit</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteInvoice(inv)}
-                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-colors"
-                                title="Hapus Penawaran Ini"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedInvoice(inv);
-                                  setDocumentModalType('INVOICE');
-                                  setIsDocModalOpen(true);
-                                }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-bold border border-amber-500/30 transition-colors"
-                                title="Buka / Cetak Faktur Invoice"
-                              >
-                                <FileText className="w-3 h-3" />
-                                <span>Invoice</span>
-                              </button>
-
-                              {/* Surat Jalan (Hanya Lunas) */}
-                              {isPaid ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedInvoice(inv);
-                                      setDocumentModalType('DELIVERY_NOTE');
-                                      setIsDocModalOpen(true);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 transition-colors"
-                                    title="Cetak Surat Jalan Pengiriman (Invoice Sudah Lunas)"
-                                  >
-                                    <Truck className="w-3 h-3" />
-                                    <span>Surat Jalan</span>
-                                  </button>
-
-                                  {/* E-Warranty */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedInvoice(inv);
-                                      setDocumentModalType('WARRANTY');
-                                      setIsDocModalOpen(true);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 text-xs font-bold border border-teal-500/30 transition-colors"
-                                    title="Cetak Kartu Garansi Digital 14 Hari"
-                                  >
-                                    <ShieldCheck className="w-3 h-3 text-teal-400" />
-                                    <span>Garansi</span>
-                                  </button>
-
-                                  {/* Remote Acceptance Gate (E-POD) */}
-                                  {(() => {
-                                    const sjNum = inv.suratJalanNumber || ('SJ-' + inv.invoiceNumber.replace(/^INV-/, ''));
-                                    const isUnlocked = unlockedSjs[sjNum];
-                                    return isUnlocked ? (
-                                      <span
-                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-950/80 text-emerald-300 text-xs font-bold border border-emerald-800"
-                                        title="Gate Tanda Tangan Serah Terima Digital E-POD di HP sudah Terbuka"
-                                      >
-                                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                        <span>TTD Terbuka</span>
-                                      </span>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUnlockAcceptance(sjNum)}
-                                        disabled={unlockingSj === sjNum}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all disabled:opacity-50"
-                                        title="Buka Kunci Tanda Tangan Serah Terima Digital di HP Supir/Penerima"
-                                      >
-                                        <Lock className="w-3 h-3" />
-                                        <span>{unlockingSj === sjNum ? 'Membuka...' : '🔓 Buka Kunci Terima'}</span>
-                                      </button>
-                                    );
-                                  })()}
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/40 text-slate-500 text-xs font-medium border border-slate-800 cursor-not-allowed opacity-60"
-                                  title="🔒 Surat Jalan terkunci. Syarat penerbitan: Tagihan Invoice harus 100% LUNAS terlebih dahulu."
-                                >
-                                  <Lock className="w-3 h-3 text-slate-500" />
-                                  <span>Surat Jalan</span>
-                                </button>
-                              )}
-
-                              {/* Void Action */}
-                              {inv.status !== 'VOID' ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleVoidInvoice(inv)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/30 transition-colors"
-                                  title="Batalkan Invoice (Holding Fee 10% max Rp 1jt + Auto Catat Refund Bank Jago)"
-                                >
-                                  <X className="w-3 h-3 text-rose-400" />
-                                  <span>Void</span>
-                                </button>
-                              ) : (
+                                {canEdit && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleConvertQuotationToInvoice(inv)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-md transition-colors"
+                                      title="Ambil penawaran ini dan buat menjadi Faktur Invoice Resmi"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Ambil ke Invoice</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditModal(inv)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors"
+                                      title="Edit penawaran harga"
+                                    >
+                                      <Pencil className="w-3 h-3 text-amber-400" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteInvoice(inv)}
+                                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-colors"
+                                      title="Hapus Penawaran Ini"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                )}
+                              </>
+                            ) : (
+                              <>
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setSelectedInvoice(inv);
-                                    setDocumentModalType('CANCELLATION_NOTE');
+                                    setDocumentModalType('INVOICE');
                                     setIsDocModalOpen(true);
                                   }}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/40 transition-colors"
-                                  title="Cetak Surat Keterangan Batal & Refund (Credit Note)"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-bold border border-amber-500/30 transition-colors"
+                                  title="Buka / Preview Faktur Invoice"
                                 >
-                                  <X className="w-3 h-3" />
-                                  <span>Credit Note</span>
+                                  <FileText className="w-3 h-3" />
+                                  <span>Invoice</span>
                                 </button>
-                              )}
 
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(inv)}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors"
-                                title="Edit rincian unit, diskon, termin pembayaran, atau data ekspedisi"
-                              >
-                                <Pencil className="w-3 h-3 text-amber-400" />
-                                <span>Edit</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteInvoice(inv)}
-                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-colors"
-                                title="Hapus Invoice Ini"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </>
-                          )}
+                                {/* Surat Jalan (Hanya Lunas) */}
+                                {isPaid ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedInvoice(inv);
+                                        setDocumentModalType('DELIVERY_NOTE');
+                                        setIsDocModalOpen(true);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 transition-colors"
+                                      title="Buka / Preview Surat Jalan Pengiriman"
+                                    >
+                                      <Truck className="w-3 h-3" />
+                                      <span>Surat Jalan</span>
+                                    </button>
+
+                                    {/* E-Warranty */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedInvoice(inv);
+                                        setDocumentModalType('WARRANTY');
+                                        setIsDocModalOpen(true);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 text-xs font-bold border border-teal-500/30 transition-colors"
+                                      title="Buka / Preview Kartu Garansi Digital"
+                                    >
+                                      <ShieldCheck className="w-3 h-3 text-teal-400" />
+                                      <span>Garansi</span>
+                                    </button>
+
+                                    {/* Remote Acceptance Gate (E-POD) */}
+                                    {(() => {
+                                      const sjNum = inv.suratJalanNumber || ('SJ-' + inv.invoiceNumber.replace(/^INV-/, ''));
+                                      const isUnlocked = unlockedSjs[sjNum];
+                                      return isUnlocked ? (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-950/80 text-emerald-300 text-xs font-bold border border-emerald-800"
+                                          title="Gate Tanda Tangan Serah Terima Digital E-POD di HP sudah Terbuka"
+                                        >
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                          <span>TTD Terbuka</span>
+                                        </span>
+                                      ) : canEdit ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUnlockAcceptance(sjNum)}
+                                          disabled={unlockingSj === sjNum}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all disabled:opacity-50"
+                                          title="Buka Kunci Tanda Tangan Serah Terima Digital di HP Supir/Penerima"
+                                        >
+                                          <Lock className="w-3 h-3" />
+                                          <span>{unlockingSj === sjNum ? 'Membuka...' : '🔓 Buka Kunci Terima'}</span>
+                                        </button>
+                                      ) : null;
+                                    })()}
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/40 text-slate-500 text-xs font-medium border border-slate-800 cursor-not-allowed opacity-60"
+                                    title="🔒 Surat Jalan terkunci. Syarat penerbitan: Tagihan Invoice harus 100% LUNAS terlebih dahulu."
+                                  >
+                                    <Lock className="w-3 h-3 text-slate-500" />
+                                    <span>Surat Jalan</span>
+                                  </button>
+                                )}
+
+                                {/* Void Action (Khusus Role dengan Izin Edit) */}
+                                {inv.status !== 'VOID' ? (
+                                  canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVoidInvoice(inv)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/30 transition-colors"
+                                      title="Batalkan Invoice (Holding Fee 10% max Rp 1jt + Auto Catat Refund Bank Jago)"
+                                    >
+                                      <X className="w-3 h-3 text-rose-400" />
+                                      <span>Void</span>
+                                    </button>
+                                  )
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedInvoice(inv);
+                                      setDocumentModalType('CANCELLATION_NOTE');
+                                      setIsDocModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/40 transition-colors"
+                                    title="Cetak Surat Keterangan Batal & Refund (Credit Note)"
+                                  >
+                                    <X className="w-3 h-3" />
+                                    <span>Credit Note</span>
+                                  </button>
+                                )}
+
+                                {canEdit && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditModal(inv)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-colors"
+                                      title="Edit rincian unit, diskon, termin pembayaran, atau data ekspedisi"
+                                    >
+                                      <Pencil className="w-3 h-3 text-amber-400" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteInvoice(inv)}
+                                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-colors"
+                                      title="Hapus Invoice Ini"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                )}
+                              </>
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -1839,6 +1852,7 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
           invoice={selectedInvoice}
           isOpen={isDocModalOpen}
           initialType={documentModalType}
+          canPrint={canEdit}
           onClose={() => setIsDocModalOpen(false)}
         />
       )}

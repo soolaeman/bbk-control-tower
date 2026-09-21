@@ -56,7 +56,8 @@ interface NonSkuQueueItem {
 }
 
 export function PipelineMonitor() {
-  const { role } = useAuth();
+  const { role, permissions } = useAuth();
+  const canEdit = role === 'ADMIN' || Boolean(permissions?.canEditPipeline || permissions?.canEditInventory);
   
   // Primary Hub Tab
   const [hubTab, setHubTab] = useState<PrimaryHubTab>('QC_DATA_QUALITY');
@@ -521,57 +522,65 @@ export function PipelineMonitor() {
 
                     {/* Exception Resolution Actions */}
                     <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                      {item.STATUS_PIPELINE === 'ERROR' && (
-                        <button
-                          type="button"
-                          onClick={() => handleResolvePipelineAction(item.SKU, 'READY_TO_PUBLISH')}
-                          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5"
-                        >
-                          <Wrench className="w-3.5 h-3.5" />
-                          <span>Autofix Metadata</span>
-                        </button>
-                      )}
+                      {canEdit ? (
+                        <>
+                          {item.STATUS_PIPELINE === 'ERROR' && (
+                            <button
+                              type="button"
+                              onClick={() => handleResolvePipelineAction(item.SKU, 'READY_TO_PUBLISH')}
+                              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5"
+                            >
+                              <Wrench className="w-3.5 h-3.5" />
+                              <span>Autofix Metadata</span>
+                            </button>
+                          )}
 
-                      {item.STATUS_PIPELINE === 'NO_PHOTOS_FOUND' && (
-                        <button
-                          type="button"
-                          onClick={() => handleResolvePipelineAction(item.SKU, 'PENDING_PHOTOS')}
-                          className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          <span>Retry Scrape Telegram</span>
-                        </button>
-                      )}
+                          {item.STATUS_PIPELINE === 'NO_PHOTOS_FOUND' && (
+                            <button
+                              type="button"
+                              onClick={() => handleResolvePipelineAction(item.SKU, 'PENDING_PHOTOS')}
+                              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>Retry Scrape Telegram</span>
+                            </button>
+                          )}
 
-                      {item.STATUS_PIPELINE === 'READY_TO_PUBLISH' && (
-                        <button
-                          type="button"
-                          onClick={() => handleResolvePipelineAction(item.SKU, 'PUBLISHED')}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5"
-                        >
-                          <UploadCloud className="w-3.5 h-3.5" />
-                          <span>Publish ke WooCommerce</span>
-                        </button>
-                      )}
+                          {item.STATUS_PIPELINE === 'READY_TO_PUBLISH' && (
+                            <button
+                              type="button"
+                              onClick={() => handleResolvePipelineAction(item.SKU, 'PUBLISHED')}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5"
+                            >
+                              <UploadCloud className="w-3.5 h-3.5" />
+                              <span>Publish ke WooCommerce</span>
+                            </button>
+                          )}
 
-                      {item.STATUS_PIPELINE === 'AMBIGUOUS' && (
-                        <button
-                          type="button"
-                          onClick={() => handleResolvePipelineAction(item.SKU, 'READY_TO_PUBLISH')}
-                          className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold"
-                        >
-                          Merge & Set Ready
-                        </button>
-                      )}
+                          {item.STATUS_PIPELINE === 'AMBIGUOUS' && (
+                            <button
+                              type="button"
+                              onClick={() => handleResolvePipelineAction(item.SKU, 'READY_TO_PUBLISH')}
+                              className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold"
+                            >
+                              Merge & Set Ready
+                            </button>
+                          )}
 
-                      <button
-                        type="button"
-                        onClick={() => handleResolvePipelineAction(item.SKU, 'SKIP: NO IMAGE')}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-xs"
-                        title="Abaikan dan tandai Skip"
-                      >
-                        Skip
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => handleResolvePipelineAction(item.SKU, 'SKIP: NO IMAGE')}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-xs"
+                            title="Abaikan dan tandai Skip"
+                          >
+                            Skip
+                          </button>
+                        </>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-950/60 border border-slate-800 text-slate-500 font-mono text-[11px]">
+                          Mode Lihat
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))
@@ -649,25 +658,33 @@ export function PipelineMonitor() {
                     </div>
 
                     <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-                      <button
-                        type="button"
-                        disabled={executingSku === report.sku}
-                        onClick={() => handleConfirmSoldReport(report)}
-                        className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-950 flex items-center gap-1.5 disabled:opacity-50"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>{executingSku === report.sku ? 'Memproses...' : 'Konfirmasi SOLD'}</span>
-                      </button>
+                      {canEdit ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={executingSku === report.sku}
+                            onClick={() => handleConfirmSoldReport(report)}
+                            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-950 flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{executingSku === report.sku ? 'Memproses...' : 'Konfirmasi SOLD'}</span>
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={() => handleDismissSoldReport(report)}
-                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800 text-xs transition-colors flex items-center gap-1.5"
-                        title="Hapus laporan ini tanpa mengubah status unit"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Abaikan</span>
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDismissSoldReport(report)}
+                            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800 text-xs transition-colors flex items-center gap-1.5"
+                            title="Hapus laporan ini tanpa mengubah status unit"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Abaikan</span>
+                          </button>
+                        </>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-950/60 border border-slate-800 text-slate-500 font-mono text-[11px]">
+                          Mode Lihat
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -754,26 +771,32 @@ export function PipelineMonitor() {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setResolveItem({
-                            invoiceId: it.invoiceId,
-                            invoiceNumber: it.invoiceNumber,
-                            customSku: it.sku,
-                            productTitle: it.productTitle,
-                            sellingPrice: it.unitPrice,
-                            quantity: it.quantity,
-                            currentModal: it.unitCost,
-                            isNonSku: true,
-                          });
-                          setIsResolveModalOpen(true);
-                        }}
-                        className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-950 flex items-center gap-1.5"
-                      >
-                        <Link2 className="w-3.5 h-3.5" />
-                        <span>{it.isResolved ? 'Edit Resolusi' : 'Resolve SKU / Modal'}</span>
-                      </button>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResolveItem({
+                              invoiceId: it.invoiceId,
+                              invoiceNumber: it.invoiceNumber,
+                              customSku: it.sku,
+                              productTitle: it.productTitle,
+                              sellingPrice: it.unitPrice,
+                              quantity: it.quantity,
+                              currentModal: it.unitCost,
+                              isNonSku: true,
+                            });
+                            setIsResolveModalOpen(true);
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-950 flex items-center gap-1.5"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                          <span>{it.isResolved ? 'Edit Resolusi' : 'Resolve SKU / Modal'}</span>
+                        </button>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-950/60 border border-slate-800 text-slate-500 font-mono text-[11px]">
+                          Mode Lihat
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -19,7 +19,8 @@ import {
 } from 'lucide-react';
 
 export function SocialMediaCenter() {
-  const { role } = useAuth();
+  const { role, permissions } = useAuth();
+  const canEdit = role === 'ADMIN' || Boolean(permissions?.canEditSocial || permissions?.canManageSocialMedia);
   const [items, setItems] = useState<SocialContentItem[]>(() => getSocialContent());
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -88,14 +89,16 @@ export function SocialMediaCenter() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-amber-500/20"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Buat Konten Baru</span>
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-amber-500/20"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Buat Konten Baru</span>
+          </button>
+        )}
       </div>
 
       {/* Content Table / Cards */}
@@ -114,16 +117,22 @@ export function SocialMediaCenter() {
                   </span>
                 </div>
 
-                <select
-                  value={item.status}
-                  onChange={(e) => handleStatusChange(item.id, e.target.value as SocialContentStatus)}
-                  className="px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[11px] font-bold text-amber-300 focus:outline-none"
-                >
-                  <option value="IDEA">IDEA</option>
-                  <option value="DRAFT">DRAFT</option>
-                  <option value="SCHEDULED">SCHEDULED</option>
-                  <option value="PUBLISHED">PUBLISHED</option>
-                </select>
+                {canEdit ? (
+                  <select
+                    value={item.status}
+                    onChange={(e) => handleStatusChange(item.id, e.target.value as SocialContentStatus)}
+                    className="px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[11px] font-bold text-amber-300 focus:outline-none"
+                  >
+                    <option value="IDEA">IDEA</option>
+                    <option value="DRAFT">DRAFT</option>
+                    <option value="SCHEDULED">SCHEDULED</option>
+                    <option value="PUBLISHED">PUBLISHED</option>
+                  </select>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-950 border border-slate-800 text-amber-300 font-mono">
+                    {item.status}
+                  </span>
+                )}
               </div>
 
               <h3 className="text-sm font-bold text-white mt-2.5 line-clamp-1">{item.topic}</h3>

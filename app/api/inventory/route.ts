@@ -70,9 +70,18 @@ export async function POST(request: NextRequest) {
     const session = await auth();
     if (!session?.user?.role) return NextResponse.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
     const roleHeader = session.user.role as UserRole;
-    if (roleHeader !== 'ADMIN' && roleHeader !== 'OPERATOR') {
+    const permissions = (session.user as any).permissions;
+    const canMutate =
+      roleHeader === 'ADMIN' ||
+      Boolean(
+        permissions?.canEditInventory ||
+        permissions?.canMarkAsSold ||
+        roleHeader === 'OPERATOR'
+      );
+
+    if (!canMutate) {
       return NextResponse.json(
-        { error: 'Unauthorized: Only ADMIN and OPERATOR can mark units as SOLD or edit inventory.' },
+        { error: 'Unauthorized: Izin Edit Inventori atau Mark as Sold diperlukan.' },
         { status: 403 }
       );
     }

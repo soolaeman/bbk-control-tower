@@ -7,8 +7,18 @@ export async function POST(request: NextRequest) {
     const session = await auth();
     if (!session?.user?.role) return NextResponse.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
     const role = session.user.role;
-    if (!['ADMIN', 'FINANCE', 'OPERATOR'].includes(role)) {
-      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+    const permissions = (session.user as any).permissions;
+    const canMutate =
+      role === 'ADMIN' ||
+      Boolean(
+        permissions?.canEditFinancials ||
+        permissions?.canEditOverview ||
+        permissions?.canEditPipeline ||
+        ['FINANCE', 'OPERATOR'].includes(role)
+      );
+
+    if (!canMutate) {
+      return NextResponse.json({ error: 'FORBIDDEN: Izin mutasi finansial/pipeline diperlukan.' }, { status: 403 });
     }
 
     const body = await request.json();

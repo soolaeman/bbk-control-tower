@@ -10,8 +10,17 @@ export async function POST(request: NextRequest) {
     const session = await auth();
     if (!session?.user?.role) return NextResponse.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
     const roleHeader = session.user.role as UserRole;
-    if (roleHeader !== 'ADMIN' && roleHeader !== 'OPERATOR') {
-      return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+    const permissions = (session.user as any).permissions;
+    const canMutate =
+      roleHeader === 'ADMIN' ||
+      Boolean(
+        permissions?.canEditPipeline ||
+        permissions?.canEditInventory ||
+        roleHeader === 'OPERATOR'
+      );
+
+    if (!canMutate) {
+      return NextResponse.json({ error: 'FORBIDDEN: Izin Edit Pipeline diperlukan.' }, { status: 403 });
     }
 
     const body = await request.json();

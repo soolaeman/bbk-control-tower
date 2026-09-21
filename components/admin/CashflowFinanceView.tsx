@@ -60,7 +60,8 @@ interface SummaryData {
 }
 
 export function CashflowFinanceView() {
-  const { role } = useAuth();
+  const { role, permissions } = useAuth();
+  const canEdit = role === 'ADMIN' || Boolean(permissions?.canEditFinancials);
 
   // Filter States
   const [datePreset, setDatePreset] = useState<UniversalDatePreset>('THIS_MONTH');
@@ -340,14 +341,16 @@ export function CashflowFinanceView() {
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-500' : ''}`} />
           </button>
 
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black text-xs transition-all shadow-lg shadow-emerald-950/50 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>+ Catat Transaksi Kas</span>
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black text-xs transition-all shadow-lg shadow-emerald-950/50 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>+ Catat Transaksi Kas</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -715,32 +718,36 @@ export function CashflowFinanceView() {
                           {item.dicatatOleh || 'Admin'}
                         </td>
                         <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                          {deleteConfirmId === item.id ? (
-                            <div className="flex items-center justify-center gap-1">
+                          {canEdit ? (
+                            deleteConfirmId === item.id ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTransaction(item.id)}
+                                  className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded text-[10px] font-bold"
+                                >
+                                  Ya, Hapus
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteConfirmId(null)}
+                                  className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            ) : (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteTransaction(item.id)}
-                                className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded text-[10px] font-bold"
+                                onClick={() => setDeleteConfirmId(item.id)}
+                                className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors"
+                                title="Hapus Transaksi"
                               >
-                                Ya, Hapus
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteConfirmId(null)}
-                                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
-                              >
-                                Batal
-                              </button>
-                            </div>
+                            )
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteConfirmId(item.id)}
-                              className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors"
-                              title="Hapus Transaksi"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <span className="text-slate-600 text-[10px]">—</span>
                           )}
                         </td>
                       </tr>
@@ -1103,6 +1110,7 @@ export function CashflowFinanceView() {
           invoice={selectedInvoice}
           isOpen={isDocModalOpen}
           initialType={documentModalType}
+          canPrint={role === 'ADMIN' || Boolean(permissions?.canEditInvoices)}
           onClose={() => setIsDocModalOpen(false)}
         />
       )}

@@ -2405,6 +2405,7 @@ export function FinanceDashboard() {
           invoice={selectedInvoice}
           isOpen={isDocModalOpen}
           initialType={documentModalType}
+          canPrint={role === 'ADMIN' || Boolean(permissions?.canEditInvoices)}
           onClose={() => setIsDocModalOpen(false)}
         />
       )}

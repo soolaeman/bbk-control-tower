@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { Invoice, DocumentType } from '@/lib/types/finance';
 import { formatIDR, parseToISODate } from '@/lib/repositories/warehouse-utils';
+import { useAuth } from '@/lib/auth/auth-context';
 import {
   Printer,
   FileText,
@@ -30,6 +31,7 @@ interface OfficialDocumentModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialType?: DocumentType;
+  canPrint?: boolean;
 }
 
 export const isWarrantyEligible = (desc: string) => {
@@ -57,7 +59,10 @@ export function OfficialDocumentModal({
   isOpen,
   onClose,
   initialType = 'INVOICE',
+  canPrint,
 }: OfficialDocumentModalProps) {
+  const { role, permissions } = useAuth();
+  const effectiveCanPrint = canPrint !== undefined ? canPrint : (role === 'ADMIN' || Boolean(permissions?.canEditInvoices));
   const [activeType, setActiveType] = useState<DocumentType>(
     initialType === 'DELIVERY_NOTE'
       ? 'DELIVERY_NOTE'
@@ -647,14 +652,26 @@ Mohon konfirmasi dan kirim bukti transfer jika dana telah terkirim. Terima kasih
               <span>{copied ? 'Tersalin!' : 'Copy WA'}</span>
             </button>
 
-            <button
-              type="button"
-              onClick={printDocument}
-              className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md transition-colors"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak / PDF</span>
-            </button>
+            {effectiveCanPrint ? (
+              <button
+                type="button"
+                onClick={printDocument}
+                className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md transition-colors"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Cetak / PDF</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800/60 text-slate-500 text-xs font-semibold cursor-not-allowed border border-slate-700/60"
+                title="🔒 Cetak Terkunci: Hanya role dengan izin Edit Dokumen yang dapat mencetak atau menerbitkan PDF resmi."
+              >
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                <span>Cetak Terkunci</span>
+              </button>
+            )}
 
             <button
               type="button"
