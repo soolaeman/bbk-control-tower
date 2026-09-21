@@ -5,3 +5,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Scratch & Ephemeral Debugging (Quarantine Zone)
+.scratch/
+scratch/
+*.tmp
+*.dump
