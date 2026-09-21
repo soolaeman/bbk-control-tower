@@ -50,14 +50,29 @@ const EXPEDITION_OPTIONS = [
   { value: 'CUSTOM', label: 'Lainnya / Tulis Manual...' },
 ] as const;
 
-export function InvoiceManager() {
+export type CommercialSubTab = 'ALL' | 'QUOTATIONS' | 'ORDERS' | 'INVOICES' | 'DISPATCHES' | 'WARRANTIES';
+
+interface InvoiceManagerProps {
+  subTab?: CommercialSubTab;
+  onSubTabChange?: (tab: CommercialSubTab) => void;
+}
+
+export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps = {}) {
   const { role } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [commercialSubTab, setCommercialSubTab] = useState<'ALL' | 'QUOTATIONS' | 'ORDERS' | 'INVOICES' | 'DISPATCHES' | 'WARRANTIES'>('ALL');
+  const [internalSubTab, setInternalSubTab] = useState<CommercialSubTab>('ALL');
+  const commercialSubTab = subTab ?? internalSubTab;
+  const setCommercialSubTab = (tab: CommercialSubTab) => {
+    if (onSubTabChange) {
+      onSubTabChange(tab);
+    } else {
+      setInternalSubTab(tab);
+    }
+  };
   const [personaMode, setPersonaMode] = useState<'RETAIL_WARM' | 'B2B_FORMAL'>('RETAIL_WARM');
 
   // Modal States
@@ -710,36 +725,28 @@ export function InvoiceManager() {
         </div>
       </div>
 
-      {/* COMMERCIAL DESK SUB-TABS (PAPER.ID PARADIGM) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bg-slate-900/60 p-2 rounded-2xl border border-slate-800 text-xs">
-        {[
-          { id: 'ALL', label: '📑 Semua Dokumen', count: invoices.length },
-          { id: 'QUOTATIONS', label: '📄 Quotation (1x24j)', count: invoices.filter((i) => i.documentType === 'QUOTATION').length },
-          { id: 'ORDERS', label: '📋 Order (PO/SO)', count: invoices.filter((i) => i.orderReference || i.customerCompany?.toLowerCase().includes('pt')).length },
-          { id: 'INVOICES', label: '🧾 Invoice Penjualan', count: invoices.filter((i) => i.documentType === 'INVOICE').length },
-          { id: 'DISPATCHES', label: '🚚 Surat Jalan (E-POD)', count: invoices.filter((i) => i.hasShipping || i.status === 'PAID').length },
-          { id: 'WARRANTIES', label: '🛡️ E-Warranty (14 Hari)', count: invoices.filter((i) => i.status === 'PAID').length },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setCommercialSubTab(tab.id as any)}
-            className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
-              commercialSubTab === tab.id
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
-            }`}
-          >
-            <span>{tab.label}</span>
-            <span
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
-                commercialSubTab === tab.id ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {tab.count}
-            </span>
-          </button>
-        ))}
+      {/* ACTIVE SUB-MODULE BANNER (CONTROLLED DIRECTLY FROM SIDEBAR) */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5 px-5 shadow-lg flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <span className="text-slate-400 font-medium">Sub-Menu Aktif:</span>
+          <span className="px-3 py-1 rounded-xl bg-amber-500/10 text-amber-400 font-black border border-amber-500/20 flex items-center gap-2 text-xs">
+            {commercialSubTab === 'ALL' && '📑 Semua Dokumen Transaksi'}
+            {commercialSubTab === 'QUOTATIONS' && '📄 Surat Penawaran (Quotation 1x24 Jam)'}
+            {commercialSubTab === 'ORDERS' && '📋 Order Masuk (PO / SO)'}
+            {commercialSubTab === 'INVOICES' && '🧾 Faktur Penjualan (Invoice)'}
+            {commercialSubTab === 'DISPATCHES' && '🚚 Pengiriman & Surat Jalan (E-POD)'}
+            {commercialSubTab === 'WARRANTIES' && '🛡️ E-Warranty Mesin (14 Hari)'}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 text-slate-400 font-mono text-[11px]">
+          <span>
+            Terfilter: <strong className="text-amber-400 font-bold">{filteredInvoices.length} Dokumen</strong>
+          </span>
+          <span className="text-slate-600">|</span>
+          <span>
+            Total: <strong className="text-white font-bold">{invoices.length} Arsip</strong>
+          </span>
+        </div>
       </div>
 
       {/* FILTER & SEARCH */}

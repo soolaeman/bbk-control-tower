@@ -35,12 +35,15 @@ import {
   CheckCircle2,
   Sparkles,
   ChevronDown,
+  ChevronRight,
   Wallet,
   PanelLeftClose,
   PanelLeftOpen,
   Maximize2,
   Minimize2,
 } from 'lucide-react';
+
+export type InvoiceSubTab = 'ALL' | 'QUOTATIONS' | 'ORDERS' | 'INVOICES' | 'DISPATCHES' | 'WARRANTIES';
 
 type AdminTab =
   | 'OVERVIEW'
@@ -57,6 +60,8 @@ type AdminTab =
 export default function AdminPage() {
   const { user, role, permissions } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>('OVERVIEW');
+  const [invoiceSubTab, setInvoiceSubTab] = useState<InvoiceSubTab>('ALL');
+  const [isInvoicesExpanded, setIsInvoicesExpanded] = useState<boolean>(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [liveStockCount, setLiveStockCount] = useState<number>(2797);
   const [readyStockCount, setReadyStockCount] = useState<number>(2229);
@@ -227,6 +232,23 @@ export default function AdminPage() {
               <ChevronDown className="w-4 h-4 text-slate-400" />
             </div>
           </div>
+
+          {activeTab === 'INVOICES' && (
+            <div className="pt-2 border-t border-white/[0.06]">
+              <select
+                value={invoiceSubTab}
+                onChange={(e) => setInvoiceSubTab(e.target.value as InvoiceSubTab)}
+                className="w-full px-3 py-2 bg-slate-900 border border-amber-500/30 rounded-xl text-xs font-bold text-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              >
+                <option value="ALL">📑 Semua Dokumen</option>
+                <option value="QUOTATIONS">📄 Quotation (1x24j)</option>
+                <option value="ORDERS">📋 Order (PO/SO)</option>
+                <option value="INVOICES">🧾 Invoice Penjualan</option>
+                <option value="DISPATCHES">🚚 Surat Jalan (E-POD)</option>
+                <option value="WARRANTIES">🛡️ E-Warranty (14 Hari)</option>
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Executive Sidebar (Visible ONLY on Desktop when not collapsed) */}
@@ -261,23 +283,74 @@ export default function AdminPage() {
                 {navItems.map((item) => {
                   if (!item.allowed) return null;
                   const isActive = activeTab === item.id;
+                  const isInvoiceMenu = item.id === 'INVOICES';
+
                   return (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium transition-all rounded-sm ${
-                        isActive
-                          ? 'text-[#3b82f6] font-semibold bg-white/[0.04]'
-                          : 'text-white/60 hover:text-white hover:bg-white/[0.02]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 truncate">
-                        <span className="shrink-0 flex items-center justify-center">
-                          {item.icon}
-                        </span>
-                        <span className="truncate">{item.label}</span>
-                      </div>
-                    </button>
+                    <div key={item.id} className="space-y-1">
+                      <button
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          if (isInvoiceMenu) {
+                            setIsInvoicesExpanded((prev) => !prev || activeTab !== 'INVOICES');
+                          }
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium transition-all rounded-lg ${
+                          isActive
+                            ? 'text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20'
+                            : 'text-white/60 hover:text-white hover:bg-white/[0.02]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 truncate">
+                          <span className="shrink-0 flex items-center justify-center">
+                            {item.icon}
+                          </span>
+                          <span className="truncate">{item.label}</span>
+                        </div>
+                        {isInvoiceMenu && (
+                          <span className="text-slate-400 shrink-0">
+                            {isActive && isInvoicesExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-amber-400" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                            )}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Paper.id Accordion Nested Sub-Menu directly below Invoices & Dokumen Resmi */}
+                      {isInvoiceMenu && isActive && isInvoicesExpanded && (
+                        <div className="pl-4 pr-1 py-1 space-y-1 ml-3 border-l-2 border-amber-500/30 animate-in slide-in-from-top-1 duration-150">
+                          {[
+                            { id: 'ALL', label: '📑 Semua Dokumen' },
+                            { id: 'QUOTATIONS', label: '📄 Quotation (1x24j)' },
+                            { id: 'ORDERS', label: '📋 Order (PO/SO)' },
+                            { id: 'INVOICES', label: '🧾 Invoice Penjualan' },
+                            { id: 'DISPATCHES', label: '🚚 Surat Jalan (E-POD)' },
+                            { id: 'WARRANTIES', label: '🛡️ E-Warranty (14 Hari)' },
+                          ].map((sub) => {
+                            const isSubActive = invoiceSubTab === sub.id;
+                            return (
+                              <button
+                                key={sub.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInvoiceSubTab(sub.id as InvoiceSubTab);
+                                  setActiveTab('INVOICES');
+                                }}
+                                className={`w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] rounded-md transition-all text-left ${
+                                  isSubActive
+                                    ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                                    : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
+                                }`}
+                              >
+                                <span className="truncate">{sub.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </nav>
@@ -356,7 +429,9 @@ export default function AdminPage() {
             {activeTab === 'OVERVIEW' && <FinanceDashboard />}
             {activeTab === 'INVENTORY' && <InventoryTable />}
             {activeTab === 'PIPELINE' && <PipelineMonitor />}
-            {activeTab === 'INVOICES' && <InvoiceManager />}
+            {activeTab === 'INVOICES' && (
+              <InvoiceManager subTab={invoiceSubTab} onSubTabChange={setInvoiceSubTab} />
+            )}
             {activeTab === 'FINANCE' && <CashflowFinanceView />}
             {activeTab === 'WAREHOUSES' && <WarehouseIntelligence />}
             {activeTab === 'SEO' && <SEOQualityControl />}
