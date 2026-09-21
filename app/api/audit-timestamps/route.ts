@@ -14,6 +14,7 @@ import {
 import {
   getTursoTelegramSoldRadarCandidates,
   dismissSoldRadarCandidate,
+  getTursoClient,
 } from '@/lib/repositories/turso-inventory-repository';
 
 export type { SoldNotice };
@@ -118,10 +119,12 @@ export async function POST(req: NextRequest) {
     }
     if (sku && timestamp) {
       newTimestamps[sku] = timestamp;
-      // Persist directly to Column AG in Google Sheets MASTER_INVENTORY
-      updateGoogleSheetsTelegramAudit(sku, timestamp).catch((err) =>
-        console.warn(`Could not update Column AG for SKU ${sku}:`, err)
-      );
+      // Persist directly to Turso SQLite SSOT products.last_checked_telegram
+      const client = getTursoClient();
+      client.execute({
+        sql: "UPDATE products SET last_checked_telegram = ? WHERE UPPER(sku) = ?",
+        args: [timestamp, sku.toUpperCase()],
+      }).catch((err) => console.warn(`Could not update Turso last_checked_telegram for SKU ${sku}:`, err));
     }
 
     const savedState = await savePersistentAuditState({

@@ -43,164 +43,80 @@ interface HubAggregate {
 export function WarehouseIntelligence({ onNavigateToInventory }: { onNavigateToInventory?: (whCode: string) => void }) {
   const { role, permissions } = useAuth();
 
-  const [inventoryItems, setInventoryItems] = useState<MasterInventoryItem[]>([]);
+  const [hubData, setHubData] = useState<HubAggregate[]>([]);
+  const [globalStats, setGlobalStats] = useState({
+    totalUnits: 0,
+    totalAvailable: 0,
+    totalSold: 0,
+    totalCapital: 0,
+    totalEstimatedSales: 0,
+    totalDeadStock: 0,
+    bestVelocityHub: 'GK (Griya Kitchen)',
+    minTurnover: 21,
+  });
+  const [deadStockTopList, setDeadStockTopList] = useState<any[]>([]);
+  const [hubSpecificItems, setHubSpecificItems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingHubItems, setIsLoadingHubItems] = useState(false);
   const [selectedHubCode, setSelectedHubCode] = useState<WarehouseCode | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAgingOnly, setFilterAgingOnly] = useState(false);
 
-  // Fetch Live Inventory Data
-  const loadInventory = useCallback(async () => {
+  // Fetch Live Aggregated Warehouse Data from Turso SQLite
+  const loadWarehouseStats = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch up to 3000 items to capture all rows from Google Sheets
-      const res = await fetch('/api/inventory?pageSize=3000', {
-        headers: { ...(role ? { 'x-bbk-role': role } : {}) },
-      });
+      const res = await fetch('/api/warehouses/stats');
       if (res.ok) {
         const data = await res.json();
-        setInventoryItems(data.items || []);
+        if (data.hubs) setHubData(data.hubs);
+        if (data.globalStats) setGlobalStats(data.globalStats);
+        if (data.deadStockItems) setDeadStockTopList(data.deadStockItems);
       }
     } catch (err) {
-      console.error('Failed to load inventory for warehouse intelligence', err);
+      console.error('Failed to load warehouse stats from Turso:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [role]);
+  }, []);
 
   useEffect(() => {
-    loadInventory();
-  }, [loadInventory]);
+    loadWarehouseStats();
+  }, [loadWarehouseStats]);
+
+  // When a specific hub is selected, fetch its items on demand (paginated 50 rows)
+  useEffect(() => {
+    if (selectedHubCode === 'ALL') {
+      setHubSpecificItems([]);
+      return;
+    }
+    let ignore = false;
+    setIsLoadingHubItems(true);
+    fetch(`/api/inventory?warehouse=${selectedHubCode}&pageSize=50`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!ignore && d?.items) {
+          setHubSpecificItems(d.items);
+        }
+      })
+      .catch((err) => console.error('Failed to fetch hub items:', err))
+      .finally(() => {
+        if (!ignore) setIsLoadingHubItems(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [selectedHubCode]);
 
   // Compute live days age for an item
-  const getItemAgeDays = (item: MasterInventoryItem): number => {
+  const getItemAgeDays = (item: any): number => {
+    if (item.age_days !== undefined && item.age_days !== null) return Number(item.age_days);
     if (!item.TANGGAL_MASUK) return 15;
     const masuk = new Date(item.TANGGAL_MASUK).getTime();
     const refDate = item.TANGGAL_TERJUAL ? new Date(item.TANGGAL_TERJUAL).getTime() : Date.now();
     const diff = Math.max(0, Math.floor((refDate - masuk) / (1000 * 60 * 60 * 24)));
     return isNaN(diff) ? 15 : diff;
   };
-
-  // Aggregate Real-time Metrics across all 14 Hubs
-  const hubData: HubAggregate[] = useMemo(() => {
-    return WAREHOUSE_14_HUBS.map((hub) => {
-      const isInternalHQ = hub.code === 'BK';
-      
-      // Match items belonging to this hub by asal_gudang or fallback SKU match
-      const hubItems = inventoryItems.filter((item) => {
-        if (item.asal_gudang) {
-          return item.asal_gudang.toUpperCase() === hub.code;
-        }
-        const skuUpper = (item.SKU || '').toUpperCase();
-        if (isInternalHQ) {
-          return skuUpper.includes('-BK-') || skuUpper.startsWith('BK-') || (item.LOKASI_UNIT || '').toUpperCase().includes('BBKITCHEN');
-        }
-        return skuUpper.includes(`-${hub.code}-`) || skuUpper.startsWith(`${hub.code}-`);
-      });
-
-      let availableUnits = 0;
-      let soldUnits = 0;
-      let totalCapital = 0;
-      let totalEstimatedSales = 0;
-      let turnoverDaysSum = 0;
-      let turnoverUnitsCount = 0;
-
-      let freshCount = 0;
-      let normalCount = 0;
-      let warningCount = 0;
-      let deadStockCount = 0;
-
-      const deadStockItems: MasterInventoryItem[] = [];
-
-      hubItems.forEach((item) => {
-        const isSold = item.STATUS_UNIT === 'SOLD';
-        if (isSold) {
-          soldUnits++;
-          if (item.DURASI_TERJUAL && item.DURASI_TERJUAL > 0) {
-            turnoverDaysSum += item.DURASI_TERJUAL;
-            turnoverUnitsCount++;
-          }
-        } else {
-          availableUnits++;
-          const modal = typeof item.HARGA_MODAL === 'number' ? item.HARGA_MODAL : 0;
-          const hargaBuka = typeof item.HARGA_BUKA_WA === 'number' ? item.HARGA_BUKA_WA : (item.HARGA_ESTIMASI_PUBLIK || 0);
-          totalCapital += modal;
-          totalEstimatedSales += hargaBuka;
-
-          const ageDays = getItemAgeDays(item);
-          if (ageDays < 30) {
-            freshCount++;
-          } else if (ageDays < 60) {
-            normalCount++;
-          } else if (ageDays < 90) {
-            warningCount++;
-          } else {
-            deadStockCount++;
-            deadStockItems.push(item);
-          }
-        }
-      });
-
-      // Sort dead stock items oldest first
-      deadStockItems.sort((a, b) => getItemAgeDays(b) - getItemAgeDays(a));
-
-      const avgTurnoverDays = turnoverUnitsCount > 0 ? Math.round(turnoverDaysSum / turnoverUnitsCount) : 21;
-
-      return {
-        code: hub.code,
-        name: hub.name,
-        partnerName: hub.partnerName,
-        hubLocation: hub.hubLocation,
-        hubGroup: hub.hubGroup,
-        isInternalHQ,
-        totalUnits: hubItems.length,
-        availableUnits,
-        soldUnits,
-        totalCapital,
-        totalEstimatedSales,
-        avgTurnoverDays,
-        freshCount,
-        normalCount,
-        warningCount,
-        deadStockCount,
-        items: hubItems,
-        deadStockItems,
-      };
-    });
-  }, [inventoryItems]);
-
-  // High-Level Global Pareto KPIs
-  const globalStats = useMemo(() => {
-    let totalUnits = 0;
-    let totalAvailable = 0;
-    let totalSold = 0;
-    let totalCapital = 0;
-    let totalDeadStock = 0;
-    let bestVelocityHub = 'GK (Griya Kitchen)';
-    let minTurnover = 999;
-
-    hubData.forEach((h) => {
-      totalUnits += h.totalUnits;
-      totalAvailable += h.availableUnits;
-      totalSold += h.soldUnits;
-      totalCapital += h.totalCapital;
-      totalDeadStock += h.deadStockCount;
-      if (h.soldUnits > 0 && h.avgTurnoverDays < minTurnover) {
-        minTurnover = h.avgTurnoverDays;
-        bestVelocityHub = `${h.code} (${h.partnerName})`;
-      }
-    });
-
-    return {
-      totalUnits,
-      totalAvailable,
-      totalSold,
-      totalCapital,
-      totalDeadStock,
-      bestVelocityHub,
-      minTurnover: minTurnover === 999 ? 18 : minTurnover,
-    };
-  }, [hubData]);
 
   // Selected Hub Object
   const currentSelectedHub = useMemo(() => {
@@ -210,15 +126,13 @@ export function WarehouseIntelligence({ onNavigateToInventory }: { onNavigateToI
 
   // Filtered unit list for drilldown inspection
   const drilldownUnits = useMemo(() => {
-    let list: MasterInventoryItem[] = [];
+    let list: any[] = [];
     if (selectedHubCode === 'ALL') {
+      list = deadStockTopList;
+    } else {
       list = filterAgingOnly
-        ? hubData.flatMap((h) => h.deadStockItems)
-        : inventoryItems;
-    } else if (currentSelectedHub) {
-      list = filterAgingOnly
-        ? currentSelectedHub.deadStockItems
-        : currentSelectedHub.items;
+        ? hubSpecificItems.filter((i) => getItemAgeDays(i) >= 90)
+        : hubSpecificItems;
     }
 
     if (searchQuery.trim()) {
@@ -230,7 +144,7 @@ export function WarehouseIntelligence({ onNavigateToInventory }: { onNavigateToI
     }
 
     return list;
-  }, [selectedHubCode, currentSelectedHub, filterAgingOnly, inventoryItems, hubData, searchQuery]);
+  }, [selectedHubCode, filterAgingOnly, deadStockTopList, hubSpecificItems, searchQuery]);
 
   return (
     <div className="space-y-6 max-w-7xl pb-16">
@@ -253,7 +167,7 @@ export function WarehouseIntelligence({ onNavigateToInventory }: { onNavigateToI
 
         <button
           type="button"
-          onClick={loadInventory}
+          onClick={loadWarehouseStats}
           disabled={isLoading}
           className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-xs font-semibold hover:border-slate-700 transition-colors shadow-sm self-start sm:self-auto disabled:opacity-50"
         >

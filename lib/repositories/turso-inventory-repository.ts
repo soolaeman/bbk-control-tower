@@ -353,63 +353,153 @@ export async function updateTursoStockStatus(
 // In-memory set of dismissed radar candidate IDs (cleared upon service restart or persisted locally)
 const dismissedCandidates = new Set<string>();
 
-export async function getTursoTelegramSoldRadarCandidates(): Promise<
-  Array<{
-    id: string;
-    sku: string;
-    dealPrice?: number;
-    notes: string;
-    reportedAt: string;
-    reportedBy: string;
-  }>
-> {
+export interface TursoSoldRadarCandidate {
+  id: string;
+  sku: string;
+  dealPrice?: number;
+  notes: string;
+  pattern: 'PATTERN_1_DELETED' | 'PATTERN_2_SINGLE_PHOTO' | 'PATTERN_3_EDITED_SOLD' | 'PATTERN_4_REPLY_SOLD' | 'SALES_REPORT';
+  patternLabel: string;
+  patternIcon: string;
+  linkTelegram?: string;
+  reportedAt: string;
+  reportedBy: string;
+}
+
+export async function getTursoTelegramSoldRadarCandidates(): Promise<TursoSoldRadarCandidate[]> {
   const client = getTursoClient();
 
-  const sql = `
-    SELECT 
-      r.kode_unit, p.title, r.caption_raw, r.link_message, r.fetch_date, r.source_group,
-      p.harga_buka_wa, p.lokasi_unit
-    FROM raw_pipeline r
-    JOIN products p ON r.kode_unit = p.sku
-    WHERE (p.status_unit = 'READY' OR p.status_unit = 'AVAILABLE')
-      AND (
-        r.caption_raw LIKE '%SOLD%' OR 
-        r.caption_raw LIKE '%LAKU%' OR 
-        r.caption_raw LIKE '%TERJUAL%' OR 
-        r.caption_raw LIKE '%SUDAH LAKU%'
-      )
-    ORDER BY r.fetch_date DESC
-    LIMIT 30
-  `;
+  const candidates: TursoSoldRadarCandidate[] = [];
+  const seenSkus = new Set<string>();
 
   try {
-    const res = await client.execute(sql);
-    const candidates: Array<{
-      id: string;
-      sku: string;
-      dealPrice?: number;
-      notes: string;
-      reportedAt: string;
-      reportedBy: string;
-    }> = [];
+    // 1. Check raw_pipeline if any fresh broadcast records exist
+    const rawSql = `
+      SELECT 
+        r.kode_unit, p.title, r.caption_raw, r.link_message, r.fetch_date, r.source_group,
+        p.harga_buka_wa, p.lokasi_unit
+      FROM raw_pipeline r
+      JOIN products p ON r.kode_unit = p.sku
+      WHERE (p.status_unit = 'READY' OR p.status_unit = 'AVAILABLE')
+        AND (
+          r.caption_raw LIKE '%SOLD%' OR 
+          r.caption_raw LIKE '%LAKU%' OR 
+          r.caption_raw LIKE '%TERJUAL%' OR 
+          r.caption_raw LIKE '%SUDAH LAKU%'
+        )
+      ORDER BY r.fetch_date DESC
+      LIMIT 20
+    `;
+    const rawRes = await client.execute(rawSql).catch(() => ({ rows: [] }));
+    for (const r of rawRes.rows) {
+      const sku = String(r.kode_unit || '').trim().toUpperCase();
+      if (!sku || dismissedCandidates.has(sku) || seenSkus.has(sku)) continue;
+      seenSkus.add(sku);
 
-    for (const r of res.rows) {
-      const sku = String(r.kode_unit || '').trim();
-      const id = `radar_${sku}`;
-      if (dismissedCandidates.has(sku)) continue;
-
-      const caption = String(r.caption_raw || '').replace(/\n+/g, ' ').slice(0, 100);
-      const title = String(r.title || '');
-      const location = String(r.lokasi_unit || '');
-      const source = String(r.source_group || 'Telegram Group');
-
+      const caption = String(r.caption_raw || '').replace(/\n+/g, ' ').slice(0, 120);
+      const isReply = caption.toLowerCase().includes('reply') || caption.toLowerCase().includes('laku ke');
       candidates.push({
-        id,
+        id: `radar_${sku}`,
         sku,
         dealPrice: r.harga_buka_wa ? Number(r.harga_buka_wa) : undefined,
-        notes: `[Radar Telegram: "${caption}..."] • ${title} (${location})`,
+        pattern: isReply ? 'PATTERN_4_REPLY_SOLD' : 'PATTERN_3_EDITED_SOLD',
+        patternLabel: isReply ? 'Pola 4: Reply SOLD di Grup' : 'Pola 3: Pesan Diedit SOLD',
+        patternIcon: isReply ? '💬' : '✏️',
+        notes: `[Radar TG: "${caption}"] • ${r.title} (${r.lokasi_unit || 'Gudang'})`,
+        linkTelegram: r.link_message ? String(r.link_message) : undefined,
         reportedAt: String(r.fetch_date || new Date().toISOString().split('T')[0]),
-        reportedBy: `Radar Telegram (${source})`,
+        reportedBy: `Radar Telegram (${r.source_group || 'Channel'})`,
+      });
+    }
+
+    // 2. Pola 3: Check products where title or description explicitly contains SOLD/LAKU/TERJUAL
+    const editedSql = `
+      SELECT sku, title, short_description, link_telegram, lokasi_unit, harga_buka_wa, harga_deal_wa
+      FROM products
+      WHERE status_unit IN ('READY', 'AVAILABLE')
+        AND (
+          title LIKE '%SOLD%' OR 
+          title LIKE '%LAKU%' OR 
+          title LIKE '%TERJUAL%' OR
+          short_description LIKE '%SOLD%' OR 
+          short_description LIKE '%LAKU%'
+        )
+      LIMIT 15
+    `;
+    const editedRes = await client.execute(editedSql).catch(() => ({ rows: [] }));
+    for (const r of editedRes.rows) {
+      const sku = String(r.sku || '').trim().toUpperCase();
+      if (!sku || dismissedCandidates.has(sku) || seenSkus.has(sku)) continue;
+      seenSkus.add(sku);
+
+      candidates.push({
+        id: `radar_${sku}`,
+        sku,
+        dealPrice: r.harga_deal_wa ? Number(r.harga_deal_wa) : (r.harga_buka_wa ? Number(r.harga_buka_wa) : undefined),
+        pattern: 'PATTERN_3_EDITED_SOLD',
+        patternLabel: 'Pola 3: Teks Diedit SOLD / LAKU',
+        patternIcon: '✏️',
+        notes: `[Terdeteksi Kata SOLD] • ${r.title} (${r.lokasi_unit || 'Gudang'})`,
+        linkTelegram: r.link_telegram ? String(r.link_telegram) : undefined,
+        reportedAt: new Date().toISOString().split('T')[0],
+        reportedBy: 'Radar AI Keyword Scan',
+      });
+    }
+
+    // 3. Pola 1: Check products with Pipeline Exception / Missing Telegram Message
+    const deletedSql = `
+      SELECT sku, title, link_telegram, lokasi_unit, harga_buka_wa, status_pipeline
+      FROM products
+      WHERE status_unit IN ('READY', 'AVAILABLE')
+        AND (status_pipeline LIKE 'ERROR%' OR is_dirty = 1)
+      ORDER BY sku DESC
+      LIMIT 15
+    `;
+    const deletedRes = await client.execute(deletedSql).catch(() => ({ rows: [] }));
+    for (const r of deletedRes.rows) {
+      const sku = String(r.sku || '').trim().toUpperCase();
+      if (!sku || dismissedCandidates.has(sku) || seenSkus.has(sku)) continue;
+      seenSkus.add(sku);
+
+      candidates.push({
+        id: `radar_${sku}`,
+        sku,
+        dealPrice: r.harga_buka_wa ? Number(r.harga_buka_wa) : undefined,
+        pattern: 'PATTERN_1_DELETED',
+        patternLabel: 'Pola 1: Pesan Dihapus / Link Exception',
+        patternIcon: '🗑️',
+        notes: `[Exception Telegram: ${r.status_pipeline || 'Dirty Row'}] • ${r.title}`,
+        linkTelegram: r.link_telegram ? String(r.link_telegram) : undefined,
+        reportedAt: new Date().toISOString().split('T')[0],
+        reportedBy: 'Radar Integrity Check',
+      });
+    }
+
+    // 4. Pola 2: Check products where photos are pending / single photo preserved
+    const singlePhotoSql = `
+      SELECT sku, title, link_telegram, lokasi_unit, harga_buka_wa
+      FROM products
+      WHERE status_unit IN ('READY', 'AVAILABLE')
+        AND status_pipeline = 'PENDING_PHOTOS'
+      LIMIT 10
+    `;
+    const singlePhotoRes = await client.execute(singlePhotoSql).catch(() => ({ rows: [] }));
+    for (const r of singlePhotoRes.rows) {
+      const sku = String(r.sku || '').trim().toUpperCase();
+      if (!sku || dismissedCandidates.has(sku) || seenSkus.has(sku)) continue;
+      seenSkus.add(sku);
+
+      candidates.push({
+        id: `radar_${sku}`,
+        sku,
+        dealPrice: r.harga_buka_wa ? Number(r.harga_buka_wa) : undefined,
+        pattern: 'PATTERN_2_SINGLE_PHOTO',
+        patternLabel: 'Pola 2: Foto Disisakan 1 di Channel',
+        patternIcon: '📸',
+        notes: `[Foto Minimalis / Pending Photos] • ${r.title}`,
+        linkTelegram: r.link_telegram ? String(r.link_telegram) : undefined,
+        reportedAt: new Date().toISOString().split('T')[0],
+        reportedBy: 'Radar Photo Monitor',
       });
     }
 

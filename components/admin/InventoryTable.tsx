@@ -191,15 +191,82 @@ export function InventoryTable() {
     };
   }, []);
 
-  const handleDismissSoldNotice = async (noticeId: string) => {
-    setSoldNotices((prev) => prev.filter((n) => n.id !== noticeId));
+  const [radarPatternFilter, setRadarPatternFilter] = useState<'ALL' | 'PATTERN_1_DELETED' | 'PATTERN_2_SINGLE_PHOTO' | 'PATTERN_3_EDITED_SOLD' | 'PATTERN_4_REPLY_SOLD'>('ALL');
+  const [isRadarOnly, setIsRadarOnly] = useState(false);
+
+  const handleDismissSoldNotice = async (noticeId: string, sku?: string) => {
+    setSoldNotices((prev) => prev.filter((n) => (noticeId ? n.id !== noticeId : n.sku !== sku)));
     try {
       await fetch('/api/audit-timestamps', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'DISMISS_SOLD_NOTICE', noticeId }),
+        body: JSON.stringify({ action: 'DISMISS_SOLD_NOTICE', noticeId, sku }),
       });
     } catch {}
+  };
+
+  const handleQuickApproveSold = async (sku: string, dealPrice?: number, notes?: string, noticeId?: string) => {
+    const targetSku = sku.trim().toUpperCase();
+    const finalPrice = dealPrice || undefined;
+    const finalNotes = notes || 'Disetujui via Radar Telegram (4 Pola Sold)';
+
+    // 1. Optimistic feedback
+    setActionSuccessMsg(`⚡ Menyetujui SOLD untuk unit ${targetSku}...`);
+    if (noticeId) {
+      setSoldNotices((prev) => prev.filter((n) => n.id !== noticeId));
+    } else {
+      setSoldNotices((prev) => prev.filter((n) => n.sku !== targetSku));
+    }
+
+    if (data?.items) {
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.map((i) =>
+                i.SKU === targetSku ? { ...i, STATUS_UNIT: 'SOLD' as const } : i
+              ),
+            }
+          : null
+      );
+    }
+
+    try {
+      // 2. Persist to Turso SQLite SSOT
+      const res = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bbk-role': role ?? '',
+        },
+        body: JSON.stringify({
+          action: 'MARK_AS_SOLD',
+          sku: targetSku,
+          dealPrice: finalPrice,
+          notes: finalNotes,
+        }),
+      });
+
+      // 3. Dismiss from pending radar state
+      fetch('/api/audit-timestamps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'DISMISS_SOLD_NOTICE', sku: targetSku, noticeId }),
+      }).catch(() => {});
+
+      if (res.ok) {
+        setActionSuccessMsg(`✓ Unit ${targetSku} 100% Selesai Disetujui SOLD di Web & Database SQLite.`);
+        fetchInventory();
+        setTimeout(() => setActionSuccessMsg(''), 4000);
+      } else {
+        const resJson = await res.json();
+        alert(resJson.error || 'Gagal menandai unit sebagai SOLD');
+        fetchInventory();
+      }
+    } catch (err) {
+      console.error('Error in quick approve sold:', err);
+      fetchInventory();
+    }
   };
 
   const markSkuAsVisited = (sku: string) => {
@@ -436,61 +503,277 @@ export function InventoryTable() {
         </div>
       )}
 
-      {/* Incoming Sold Notices from Sales */}
-      {soldNotices.length > 0 && (
-        <div className="bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-300 flex items-center gap-2">
-              <span>📢 {soldNotices.length} Laporan Unit Terjual dari Tim Sales:</span>
+      {/* Quick Status Pill Bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setStatusUnit('ALL');
+            setIsRadarOnly(false);
+            setPage(1);
+          }}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            statusUnit === 'ALL' && !isRadarOnly
+              ? 'bg-slate-200 text-slate-950 shadow-md'
+              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+          }`}
+        >
+          <span>🏢 Semua Unit</span>
+          {data?.stats?.totalUnits !== undefined && (
+            <span className="text-[10px] font-mono opacity-80 font-normal">
+              ({data.stats.totalUnits.toLocaleString('id-ID')})
             </span>
-            <span className="text-[10px] text-amber-400 font-mono font-bold uppercase bg-amber-950 px-2 py-0.5 rounded border border-amber-800">
-              Menunggu Verifikasi Admin
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setStatusUnit('READY');
+            setIsRadarOnly(false);
+            setPage(1);
+          }}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            statusUnit === 'READY' && !isRadarOnly
+              ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-black'
+              : 'bg-slate-900 border border-slate-800 text-emerald-400 hover:border-emerald-700'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <span>READY (Siap Jual)</span>
+          {data?.stats?.availableUnits !== undefined && (
+            <span className="text-[10px] font-mono opacity-80 font-normal">
+              ({data.stats.availableUnits.toLocaleString('id-ID')})
             </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {soldNotices.map((notice) => (
-              <div key={notice.id} className="p-3 bg-slate-950/90 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-amber-400 text-xs">{notice.sku}</span>
-                    {notice.dealPrice ? (
-                      <span className="text-emerald-400 font-mono text-[11px] font-bold">
-                        Deal: {formatIDR(notice.dealPrice)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-[11px] text-slate-300 truncate mt-0.5">{notice.notes}</p>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const targetItem = data?.items?.find((i) => i.SKU === notice.sku) || ({
-                        SKU: notice.sku,
-                        PRODUCT_TITLE: notice.sku,
-                        HARGA_BUKA_WA: notice.dealPrice,
-                      } as any);
-                      setDealPriceInput(notice.dealPrice ? String(notice.dealPrice) : '');
-                      setSoldNotesInput(notice.notes || '');
-                      setSoldModalItem(targetItem);
-                      handleDismissSoldNotice(notice.id);
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition-colors"
-                  >
-                    ✓ Ubah ke SOLD
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDismissSoldNotice(notice.id)}
-                    className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-[11px]"
-                    title="Abaikan Laporan"
-                  >
-                    ✕
-                  </button>
-                </div>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setStatusUnit('SOLD');
+            setIsRadarOnly(false);
+            setPage(1);
+          }}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            statusUnit === 'SOLD' && !isRadarOnly
+              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20 font-black'
+              : 'bg-slate-900 border border-slate-800 text-rose-400 hover:border-rose-700'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-rose-500" />
+          <span>SOLD (Terjual)</span>
+          {data?.stats?.soldUnits !== undefined && (
+            <span className="text-[10px] font-mono opacity-80 font-normal">
+              ({data.stats.soldUnits.toLocaleString('id-ID')})
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setIsRadarOnly((prev) => !prev);
+          }}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            isRadarOnly
+              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30 font-black'
+              : 'bg-amber-950/40 border border-amber-500/50 text-amber-300 hover:bg-amber-900/40'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+          <span>⚡ Radar Telegram (4 Pola Sold)</span>
+          {soldNotices.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 text-[10px] font-mono font-bold">
+              {soldNotices.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Radar Telegram & Meja Verifikasi Sold (4 Pola) */}
+      {(isRadarOnly || soldNotices.length > 0) && (
+        <div className="bg-gradient-to-b from-amber-950/60 to-slate-950 border border-amber-500/50 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <h3 className="text-sm font-bold text-amber-300 tracking-tight flex items-center gap-1.5">
+                  <span>⚡ Radar Telegram & Meja Verifikasi Sold</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
+                    4 Pola Signal
+                  </span>
+                </h3>
               </div>
-            ))}
+              <p className="text-xs text-slate-400 mt-1">
+                Mendeteksi sinyal unit laku di Channel Telegram rekanan secara otomatis untuk mencegah barang sudah laku ditawarkan ke pembeli WA.
+              </p>
+            </div>
+
+            {/* Pattern Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setRadarPatternFilter('ALL')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                  radarPatternFilter === 'ALL'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                Semua ({soldNotices.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRadarPatternFilter('PATTERN_1_DELETED')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                  radarPatternFilter === 'PATTERN_1_DELETED'
+                    ? 'bg-rose-500 text-white shadow-sm'
+                    : 'bg-slate-900 text-rose-300 hover:text-white border border-slate-800'
+                }`}
+                title="Pola 1: Pesan postingan dihapus oleh admin gudang di Telegram"
+              >
+                <span>🗑️ Pola 1: Dihapus</span>
+                <span className="font-mono text-[10px]">({soldNotices.filter((n) => n.pattern === 'PATTERN_1_DELETED').length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRadarPatternFilter('PATTERN_2_SINGLE_PHOTO')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                  radarPatternFilter === 'PATTERN_2_SINGLE_PHOTO'
+                    ? 'bg-sky-500 text-slate-950 shadow-sm'
+                    : 'bg-slate-900 text-sky-300 hover:text-white border border-slate-800'
+                }`}
+                title="Pola 2: Foto album dihapus dan disisakan 1 foto saja"
+              >
+                <span>📸 Pola 2: Foto 1</span>
+                <span className="font-mono text-[10px]">({soldNotices.filter((n) => n.pattern === 'PATTERN_2_SINGLE_PHOTO').length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRadarPatternFilter('PATTERN_3_EDITED_SOLD')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                  radarPatternFilter === 'PATTERN_3_EDITED_SOLD'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'bg-slate-900 text-emerald-300 hover:text-white border border-slate-800'
+                }`}
+                title="Pola 3: Pesan diedit dengan mencantumkan kata SOLD / LAKU / TERJUAL"
+              >
+                <span>✏️ Pola 3: Diedit SOLD</span>
+                <span className="font-mono text-[10px]">({soldNotices.filter((n) => n.pattern === 'PATTERN_3_EDITED_SOLD').length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRadarPatternFilter('PATTERN_4_REPLY_SOLD')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                  radarPatternFilter === 'PATTERN_4_REPLY_SOLD'
+                    ? 'bg-purple-500 text-white shadow-sm'
+                    : 'bg-slate-900 text-purple-300 hover:text-white border border-slate-800'
+                }`}
+                title="Pola 4: Admin gudang me-reply pesan dengan kata SOLD / BOOKED / DP"
+              >
+                <span>💬 Pola 4: Reply SOLD</span>
+                <span className="font-mono text-[10px]">({soldNotices.filter((n) => n.pattern === 'PATTERN_4_REPLY_SOLD').length})</span>
+              </button>
+            </div>
           </div>
+
+          {/* Cards Grid */}
+          {soldNotices.filter((n) => radarPatternFilter === 'ALL' || n.pattern === radarPatternFilter).length === 0 ? (
+            <div className="py-6 text-center text-slate-400 text-xs bg-slate-950/60 rounded-xl border border-slate-800">
+              Tidak ada kandidat unit terdeteksi untuk filter pola ini.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {soldNotices
+                .filter((n) => radarPatternFilter === 'ALL' || n.pattern === radarPatternFilter)
+                .map((notice) => (
+                  <div
+                    key={notice.id}
+                    className="p-3.5 bg-slate-950 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md hover:border-amber-400/60 transition-all"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono font-bold text-amber-300 text-xs px-2 py-0.5 rounded bg-slate-900 border border-slate-700">
+                          {notice.sku}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-slate-300 flex items-center gap-1">
+                          <span>{notice.patternIcon || '⚡'}</span>
+                          <span>{notice.patternLabel || 'Radar Candidate'}</span>
+                        </span>
+                        {notice.dealPrice ? (
+                          <span className="text-emerald-400 font-mono text-[11px] font-bold">
+                            Estimasi: {formatIDR(notice.dealPrice)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">
+                        {notice.notes}
+                      </p>
+                      <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                        <span>📡 {notice.reportedBy || 'Radar Telegram'}</span>
+                        <span>•</span>
+                        <span>{notice.reportedAt}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      {notice.linkTelegram && (
+                        <a
+                          href={notice.linkTelegram}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => markSkuAsVisited(notice.sku)}
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-950/80 border border-blue-800 text-blue-300 hover:bg-blue-900 text-[11px] font-bold transition-colors inline-flex items-center gap-1"
+                          title="Buka Pesan Asli di Telegram"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Cek TG</span>
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleQuickApproveSold(notice.sku, notice.dealPrice, notice.notes, notice.id)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm transition-colors inline-flex items-center gap-1"
+                        title="1-Klik Setujui SOLD (Sinkron ke SQLite Turso)"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Setujui SOLD</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetItem = data?.items?.find((i) => i.SKU === notice.sku) || ({
+                            SKU: notice.sku,
+                            PRODUCT_TITLE: notice.sku,
+                            HARGA_BUKA_WA: notice.dealPrice,
+                          } as any);
+                          setDealPriceInput(notice.dealPrice ? String(notice.dealPrice) : '');
+                          setSoldNotesInput(notice.notes || '');
+                          setSoldModalItem(targetItem);
+                          handleDismissSoldNotice(notice.id, notice.sku);
+                        }}
+                        className="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-[11px]"
+                        title="Sesuaikan Harga Deal & Catatan"
+                      >
+                        ⚙️
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDismissSoldNotice(notice.id, notice.sku)}
+                        className="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-rose-400 text-[11px]"
+                        title="Abaikan (False Positive / Bukan Terjual)"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -815,8 +1098,17 @@ export function InventoryTable() {
                             <span className="w-2 h-2 rounded-full bg-rose-500" title="Dirty Data" />
                           )}
                           {soldNotice && (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold">
-                              📢 Lapor Sold
+                            <span
+                              className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold inline-flex items-center gap-1 cursor-pointer hover:bg-amber-500/30 transition-colors"
+                              onClick={() => {
+                                setSoldModalItem(item);
+                                setDealPriceInput(String(soldNotice.dealPrice || item.HARGA_BUKA_WA || ''));
+                                setSoldNotesInput(soldNotice.notes || '');
+                              }}
+                              title={soldNotice.notes || 'Radar Telegram Candidate'}
+                            >
+                              <span>{soldNotice.patternIcon || '⚡'}</span>
+                              <span>{soldNotice.patternLabel || 'Radar Sold'}</span>
                             </span>
                           )}
                         </div>
@@ -932,17 +1224,29 @@ export function InventoryTable() {
                                 <span>Set Ready</span>
                               </button>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSoldModalItem(item);
-                                  setDealPriceInput(String(item.HARGA_DEAL_WA || item.HARGA_BUKA_WA || ''));
-                                }}
-                                className="px-2 py-1 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-bold transition-colors"
-                                title="Tandai Sudah Terjual (Deal)"
-                              >
-                                Mark Sold
-                              </button>
+                              soldNotice ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickApproveSold(item.SKU, soldNotice.dealPrice, soldNotice.notes, soldNotice.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black transition-all shadow-md shadow-amber-500/20 flex items-center gap-1"
+                                  title="1-Klik Setujui SOLD (Sinkron ke SQLite Turso)"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <span>Setujui SOLD</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSoldModalItem(item);
+                                    setDealPriceInput(String(item.HARGA_DEAL_WA || item.HARGA_BUKA_WA || ''));
+                                  }}
+                                  className="px-2 py-1 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-bold transition-colors"
+                                  title="Tandai Sudah Terjual (Deal)"
+                                >
+                                  Mark Sold
+                                </button>
+                              )
                             )
                           )}
                         </div>
