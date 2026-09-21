@@ -25,10 +25,11 @@ export async function GET(request: NextRequest) {
     const page = searchParams.get('page') ? Number(searchParams.get('page')) : 1;
     const pageSize = searchParams.get('pageSize') ? Number(searchParams.get('pageSize')) : 25;
 
-    // Role is injected by authenticated server middleware; never trust a client role parameter.
+    // Role and permissions are injected by authenticated server session
     const session = await auth();
     if (!session?.user?.role) return NextResponse.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
     const roleHeader = session.user.role as UserRole;
+    const permissions = (session.user as any).permissions;
 
     // Direct Query to Turso SQLite SSOT
     const result = await queryTursoInventory(
@@ -49,7 +50,8 @@ export async function GET(request: NextRequest) {
         page,
         pageSize,
       },
-      roleHeader
+      roleHeader,
+      permissions
     );
     return NextResponse.json(result);
   } catch (error: any) {

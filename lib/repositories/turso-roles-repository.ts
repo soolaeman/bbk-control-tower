@@ -134,10 +134,13 @@ export async function updateRole(
   await client.execute({
     sql: `
       UPDATE app_roles
-      SET name = ?, description = ?, permissions_json = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = CASE WHEN ? != '' THEN ? ELSE name END,
+          description = CASE WHEN ? != '' THEN ? ELSE description END,
+          permissions_json = ?,
+          updated_at = CURRENT_TIMESTAMP
       WHERE UPPER(id) = UPPER(?)
     `,
-    args: [name.trim(), description.trim(), JSON.stringify(finalPermissions), cleanId],
+    args: [name.trim(), name.trim(), description.trim(), description.trim(), JSON.stringify(finalPermissions), cleanId],
   });
 
   return true;

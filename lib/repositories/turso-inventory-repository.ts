@@ -8,7 +8,7 @@ import type {
   WarehouseCode,
   GuardrailStatus,
 } from '@/lib/types/inventory';
-import { UserRole, ROLE_PERMISSIONS } from '@/lib/types/auth';
+import { UserRole, RolePermissions, ROLE_PERMISSIONS } from '@/lib/types/auth';
 
 const TURSO_URL = process.env.TURSO_DATABASE_URL || 'libsql://bbk-soolaeman.aws-ap-northeast-1.turso.io';
 const TURSO_AUTH_TOKEN =
@@ -32,17 +32,31 @@ export function getTursoClient() {
   return clientInstance;
 }
 
-export function maskItemForRole(item: MasterInventoryItem, role?: UserRole): MasterInventoryItem {
-  const permissions = role
-    ? ROLE_PERMISSIONS[role]
-    : {
-        canViewInternalCost: false,
-        canViewFloorPrice: false,
-        canViewDealPrice: false,
-        canViewTelegramLink: false,
-        canViewSupplierData: false,
-        isInvestorRestricted: true,
-      };
+export function maskItemForRole(
+  item: MasterInventoryItem,
+  role?: UserRole,
+  customPermissions?: RolePermissions
+): MasterInventoryItem {
+  if (role === 'ADMIN') return item;
+
+  const permissions: RolePermissions =
+    customPermissions ||
+    (role && (ROLE_PERMISSIONS as Record<string, RolePermissions>)[role]) || {
+      canViewInternalCost: false,
+      canViewFloorPrice: false,
+      canViewDealPrice: false,
+      canViewTelegramLink: false,
+      canViewSupplierData: false,
+      isInvestorRestricted: true,
+      canMarkAsSold: false,
+      canEditInventory: false,
+      canManageInvoices: false,
+      canViewFinanceReports: false,
+      canEditSEO: false,
+      canManageSocialMedia: false,
+      canViewRawAnalytics: false,
+      canAccessInvestorPortal: false,
+    };
 
   const copy = { ...item };
 
@@ -53,7 +67,7 @@ export function maskItemForRole(item: MasterInventoryItem, role?: UserRole): Mas
     delete copy.HARGA_FLOOR_WA;
     delete copy.MARGIN_FLOOR;
   }
-  if (!permissions.canViewDealPrice && role !== 'OPERATOR' && role !== 'ADMIN' && role !== 'FINANCE') {
+  if (!permissions.canViewDealPrice) {
     delete copy.HARGA_DEAL_WA;
     delete copy.MARGIN_DEAL;
   }
@@ -143,7 +157,8 @@ export function mapRowToMasterItem(row: Record<string, any>): MasterInventoryIte
 
 export async function queryTursoInventory(
   options: InventoryFilterOptions,
-  role?: UserRole
+  role?: UserRole,
+  permissions?: RolePermissions
 ): Promise<PaginatedInventoryResponse> {
   const client = getTursoClient();
 
@@ -274,7 +289,7 @@ export async function queryTursoInventory(
   const total = Number(countRes.rows[0]?.total || 0);
   const totalPages = Math.ceil(total / pageSize);
   const items = itemsRes.rows.map((row) =>
-    maskItemForRole(mapRowToMasterItem(row as unknown as Record<string, any>), role)
+    maskItemForRole(mapRowToMasterItem(row as unknown as Record<string, any>), role, permissions)
   );
 
   return {

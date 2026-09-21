@@ -985,13 +985,13 @@ export function FinanceDashboard() {
     };
   }, [inventoryItems, categoryEconomics, channelFilter, categoryFilter, warehouseFilter, resolveCategoryBucket]);
 
-  if (!permissions?.canViewFinanceReports && role !== 'ADMIN' && role !== 'INVESTOR') {
+  if (!permissions?.canViewFinanceReports && role !== 'ADMIN') {
     return (
       <div className="p-8 bg-slate-900/80 border border-slate-800 rounded-2xl text-center space-y-3">
         <Lock className="w-10 h-10 text-amber-500 mx-auto" />
         <h2 className="text-lg font-bold text-white">Akses Keuangan Terbatas</h2>
         <p className="text-xs text-slate-400 max-w-md mx-auto">
-          Modul Keuangan memerlukan role ADMIN, FINANCE, atau INVESTOR. Silakan beralih role pada switcher di pojok kanan atas untuk melihat laporan.
+          Modul Keuangan memerlukan izin hak akses laporan finansial (canViewFinanceReports). Hubungi Administrator untuk mengaktifkan izin ini.
         </p>
       </div>
     );

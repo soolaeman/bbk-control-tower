@@ -38,6 +38,7 @@ export interface UserSession {
   email: string;
   role: UserRole;
   avatarUrl?: string;
+  permissions?: RolePermissions;
 }
 
 export interface RolePermissions {

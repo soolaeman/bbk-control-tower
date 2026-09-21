@@ -65,11 +65,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchPermissions]);
 
-  // Compute active permissions: ADMIN is always full control, otherwise check dynamic matrix or fallback
+  // Compute active permissions:
+  // 1. ADMIN is always full control
+  // 2. Direct session permissions embedded in NextAuth JWT (zero-delay on mount)
+  // 3. Dynamic permissionsMatrix[role] from Turso DB
+  // 4. Static fallback or VIEWER default
+  const sessionPermissions = (session?.user as any)?.permissions as RolePermissions | undefined;
+
   const activePermissions: RolePermissions =
     role === "ADMIN"
       ? ROLE_PERMISSIONS.ADMIN
-      : permissionsMatrix[role] || (ROLE_PERMISSIONS as Record<string, RolePermissions>)[role] || ROLE_PERMISSIONS.VIEWER;
+      : sessionPermissions ||
+        permissionsMatrix[role] ||
+        (ROLE_PERMISSIONS as Record<string, RolePermissions>)[role] ||
+        ROLE_PERMISSIONS.VIEWER;
 
   const value: AuthContextType = {
     user,

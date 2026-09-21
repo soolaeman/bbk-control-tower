@@ -1,22 +1,17 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import type { UserRole } from "@/lib/types/auth";
-
-const API_ROLE_RULES: Array<{ prefix: string; roles: UserRole[] }> = [
-  { prefix: "/api/inventory", roles: ["ADMIN", "OPERATOR"] },
-  { prefix: "/api/pipeline", roles: ["ADMIN", "OPERATOR"] },
-  { prefix: "/api/finance", roles: ["ADMIN", "FINANCE", "INVESTOR"] },
-  { prefix: "/api/invoices", roles: ["ADMIN", "FINANCE"] },
-  { prefix: "/api/analytics", roles: ["ADMIN", "MARKETING", "VIEWER", "INVESTOR"] },
-];
+import type { UserRole, RolePermissions } from "@/lib/types/auth";
 
 export default auth((request) => {
   const { pathname } = request.nextUrl;
 
+  // 1. Static assets & public auth bypass
   if (
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next/") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml"
   ) {
     return NextResponse.next();
   }
@@ -25,7 +20,7 @@ export default auth((request) => {
   const isApi = pathname.startsWith("/api/");
   const isAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
 
-  // This repository is INTERNAL. Public prototype routes are intentionally isolated.
+  // 2. Public route isolation
   if (!isAdmin && !isApi && pathname !== "/login") {
     if (!session?.user) {
       return NextResponse.redirect(new URL("/login", request.url));
@@ -40,6 +35,7 @@ export default auth((request) => {
     return NextResponse.next();
   }
 
+  // 3. Unauthenticated gatekeeper
   if (!session?.user) {
     if (isApi) {
       return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
@@ -48,6 +44,8 @@ export default auth((request) => {
   }
 
   const role = (session.user as { role?: UserRole }).role;
+  const permissions = (session.user as { permissions?: RolePermissions }).permissions;
+
   if (!role) {
     if (isApi) {
       return NextResponse.json({ error: "ROLE_NOT_ASSIGNED" }, { status: 403 });
@@ -55,17 +53,63 @@ export default auth((request) => {
     return NextResponse.redirect(new URL("/login?error=role", request.url));
   }
 
-  // Server-side role enforcement. The client cannot choose its own role.
+  // 4. Server-Side Permission Enforcement for APIs
   if (isApi) {
-    const rule = API_ROLE_RULES.find((entry) => pathname.startsWith(entry.prefix));
-    const allowedRoles = rule?.roles ?? ["ADMIN"];
-    if (!allowedRoles.includes(role)) {
-      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    // ADMIN (Owner) always has master bypass
+    if (role === "ADMIN") {
+      const headers = new Headers(request.headers);
+      headers.set("x-bbk-role", role);
+      headers.set("x-bbk-authenticated", "true");
+      if (permissions) headers.set("x-bbk-permissions", JSON.stringify(permissions));
+      return NextResponse.next({ request: { headers } });
+    }
+
+    // Gating for /api/roles:
+    // GET: Any authenticated user can read role metadata and permissions
+    // POST: Only ADMIN can modify roles and users
+    if (pathname.startsWith("/api/roles")) {
+      if (request.method === "POST") {
+        return NextResponse.json(
+          { error: "FORBIDDEN: Hanya ADMIN yang dapat mengonfigurasi role dan pengguna." },
+          { status: 403 }
+        );
+      }
+      const headers = new Headers(request.headers);
+      headers.set("x-bbk-role", role);
+      headers.set("x-bbk-authenticated", "true");
+      return NextResponse.next({ request: { headers } });
+    }
+
+    // Permission-based gating for other API routes
+    let isAllowed = true;
+
+    if (pathname.startsWith("/api/finance")) {
+      isAllowed = Boolean(permissions?.canViewFinanceReports);
+    } else if (pathname.startsWith("/api/invoices")) {
+      isAllowed = Boolean(permissions?.canManageInvoices);
+    } else if (pathname.startsWith("/api/inventory")) {
+      isAllowed = Boolean(permissions?.canViewFloorPrice || permissions?.canEditInventory);
+    } else if (pathname.startsWith("/api/pipeline")) {
+      isAllowed = Boolean(permissions?.canEditInventory);
+    } else if (pathname.startsWith("/api/sales-helper")) {
+      isAllowed = Boolean(permissions?.canViewDealPrice || permissions?.canViewFloorPrice);
+    } else if (pathname.startsWith("/api/seo")) {
+      isAllowed = Boolean(permissions?.canEditSEO);
+    } else if (pathname.startsWith("/api/analytics")) {
+      isAllowed = Boolean(permissions?.canViewRawAnalytics || permissions?.canViewFinanceReports);
+    }
+
+    if (!isAllowed) {
+      return NextResponse.json(
+        { error: "FORBIDDEN: Role Anda tidak memiliki izin untuk modul ini." },
+        { status: 403 }
+      );
     }
 
     const headers = new Headers(request.headers);
     headers.set("x-bbk-role", role);
     headers.set("x-bbk-authenticated", "true");
+    if (permissions) headers.set("x-bbk-permissions", JSON.stringify(permissions));
     return NextResponse.next({ request: { headers } });
   }
 

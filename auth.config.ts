@@ -1,6 +1,7 @@
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
-import type { UserRole } from "@/lib/types/auth";
+import type { UserRole, RolePermissions } from "@/lib/types/auth";
+import { ROLE_PERMISSIONS } from "@/lib/types/auth";
 import { getUserWithRoleByEmail } from "@/lib/repositories/turso-roles-repository";
 
 const OWNER_EMAIL = "bukanbarukitchen@gmail.com";
@@ -47,24 +48,35 @@ export const authConfig = {
       if (email) {
         if (email === OWNER_EMAIL) {
           token.role = "ADMIN";
+          token.permissions = ROLE_PERMISSIONS.ADMIN;
         } else {
           try {
             const userRecord = await getUserWithRoleByEmail(email);
             if (userRecord?.user?.role) {
               token.role = userRecord.user.role;
+              token.permissions = userRecord.permissions;
             } else {
-              token.role = getFallbackUsers()[email] || "VIEWER";
+              const fallbackRole = getFallbackUsers()[email] || "VIEWER";
+              token.role = fallbackRole;
+              token.permissions = (ROLE_PERMISSIONS as Record<string, RolePermissions>)[fallbackRole] || ROLE_PERMISSIONS.VIEWER;
             }
           } catch {
-            token.role = getFallbackUsers()[email] || "VIEWER";
+            const fallbackRole = getFallbackUsers()[email] || "VIEWER";
+            token.role = fallbackRole;
+            token.permissions = (ROLE_PERMISSIONS as Record<string, RolePermissions>)[fallbackRole] || ROLE_PERMISSIONS.VIEWER;
           }
         }
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user && token.role) {
-        session.user.role = token.role as UserRole;
+      if (session.user) {
+        if (token.role) {
+          session.user.role = token.role as UserRole;
+        }
+        if (token.permissions) {
+          (session.user as any).permissions = token.permissions as RolePermissions;
+        }
       }
       return session;
     },
