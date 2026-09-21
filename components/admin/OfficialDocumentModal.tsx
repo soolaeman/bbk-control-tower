@@ -126,6 +126,7 @@ export function OfficialDocumentModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    const currentIso = new Date().toISOString();
     // DIRECTIVE PR-1 (Task 1): Auto-provision data Turso on document open
     if (activeType === 'DELIVERY_NOTE' && docNumber) {
       fetch('/api/dispatches', {
@@ -142,7 +143,7 @@ export function OfficialDocumentModal({
             vehiclePlateReal: plateNumber || '-',
             recipientNameAllowed: invoice.customerName,
             isUnlockedForAcceptance: false,
-            dispatchedAt: now.toISOString(),
+            dispatchedAt: currentIso,
           },
         }),
       }).catch((err) => console.warn('Auto-save dispatch warning:', err));
@@ -158,7 +159,7 @@ export function OfficialDocumentModal({
             invoiceNumber: invoice.invoiceNumber,
             customerName: invoice.customerName,
             customerCompany: invoice.customerCompany || undefined,
-            receivedAt: now.toISOString(),
+            receivedAt: currentIso,
             warrantyExpiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
             publicExpiresAt: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(),
             status: 'ACTIVE',
@@ -170,8 +171,8 @@ export function OfficialDocumentModal({
               itemCondition: it.condition || 'SECOND_RECONDITIONED',
               warrantyEligible: isWarrantyEligible(it.description),
             })),
-            createdAt: now.toISOString(),
-            updatedAt: now.toISOString(),
+            createdAt: currentIso,
+            updatedAt: currentIso,
           },
         }),
       }).catch((err) => console.warn('Auto-save warranty warning:', err));
@@ -200,6 +201,7 @@ export function OfficialDocumentModal({
         .then(setSjQrUrl)
         .catch((err) => console.error('Failed to generate SJ QR:', err));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activeType, docNumber, warrantyVerificationUrl, sjTrackingUrl, expedition, driverName, driverPhone, plateNumber]);
 
   if (!isOpen) return null;
@@ -259,27 +261,7 @@ export function OfficialDocumentModal({
       ? invoice.refundAmount
       : Math.max(0, (invoice.dpAmount || totalPaid) - calculatedHoldingFee);
 
-  // Gate 2: Warranty Classifier (Pendingin/Kompor vs Meja/Rak/Sink)
-  const isWarrantyEligible = (desc: string) => {
-    const lower = (desc || '').toLowerCase();
-    return (
-      lower.includes('chiller') ||
-      lower.includes('freezer') ||
-      lower.includes('showcase') ||
-      lower.includes('kulkas') ||
-      lower.includes('kompor') ||
-      lower.includes('burner') ||
-      lower.includes('fryer') ||
-      lower.includes('oven') ||
-      lower.includes('steamer') ||
-      lower.includes('ice maker') ||
-      lower.includes('blender') ||
-      lower.includes('mixer') ||
-      lower.includes('slicer') ||
-      lower.includes('mesin')
-    );
-  };
-
+  // Gate 2: Eligible Items Filter using top-level isWarrantyEligible
   const eligibleItems = invoice.items.filter((it) => isWarrantyEligible(it.description));
   const nonEligibleItems = invoice.items.filter((it) => !isWarrantyEligible(it.description));
 
