@@ -369,3 +369,94 @@ export async function unlockTursoDispatchAcceptance(sjNumber: string): Promise<b
     return false;
   }
 }
+
+// ==========================================
+// NON-SKU TRANSACTIONS REPOSITORY (TURSO SSOT)
+// ==========================================
+
+export async function saveTursoNonSkuTransaction(tx: any): Promise<void> {
+  const client = getTursoClient();
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS non_sku_transactions (
+      id TEXT PRIMARY KEY,
+      invoice_number TEXT,
+      invoice_id TEXT,
+      tanggal TEXT,
+      item_title TEXT,
+      sku_temp TEXT,
+      quantity INTEGER,
+      hpp_modal REAL,
+      harga_jual REAL,
+      realized_profit REAL,
+      vendor_bengkel TEXT,
+      customer_name TEXT,
+      notes TEXT,
+      hub_location TEXT,
+      warehouse_code TEXT,
+      category TEXT,
+      resolved_at TEXT,
+      resolved_by TEXT
+    )
+  `);
+
+  await client.execute({
+    sql: `
+      INSERT OR REPLACE INTO non_sku_transactions (
+        id, invoice_number, invoice_id, tanggal, item_title, sku_temp,
+        quantity, hpp_modal, harga_jual, realized_profit, vendor_bengkel,
+        customer_name, notes, hub_location, warehouse_code, category,
+        resolved_at, resolved_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      tx.id,
+      tx.invoiceNumber,
+      tx.invoiceId || null,
+      tx.tanggal,
+      tx.itemTitle,
+      tx.skuTemp,
+      tx.quantity,
+      tx.hppModal,
+      tx.hargaJual,
+      tx.realizedProfit,
+      tx.vendorBengkel || null,
+      tx.customerName || null,
+      tx.notes || null,
+      tx.hubLocation || null,
+      tx.warehouseCode || null,
+      tx.category || null,
+      tx.resolvedAt,
+      tx.resolvedBy,
+    ],
+  });
+}
+
+export async function fetchTursoNonSkuTransactions(): Promise<any[]> {
+  const client = getTursoClient();
+  try {
+    const res = await client.execute('SELECT * FROM non_sku_transactions ORDER BY tanggal DESC');
+    return res.rows.map((r: any) => ({
+      id: String(r.id),
+      invoiceNumber: String(r.invoice_number || ''),
+      invoiceId: r.invoice_id ? String(r.invoice_id) : undefined,
+      tanggal: String(r.tanggal || ''),
+      itemTitle: String(r.item_title || ''),
+      skuTemp: String(r.sku_temp || ''),
+      quantity: Number(r.quantity || 1),
+      hppModal: Number(r.hpp_modal || 0),
+      hargaJual: Number(r.harga_jual || 0),
+      realizedProfit: Number(r.realized_profit || 0),
+      vendorBengkel: r.vendor_bengkel ? String(r.vendor_bengkel) : undefined,
+      customerName: r.customer_name ? String(r.customer_name) : undefined,
+      notes: r.notes ? String(r.notes) : undefined,
+      hubLocation: r.hub_location ? String(r.hub_location) : undefined,
+      warehouseCode: r.warehouse_code ? String(r.warehouse_code) : undefined,
+      category: r.category ? String(r.category) : undefined,
+      resolvedAt: String(r.resolved_at || ''),
+      resolvedBy: String(r.resolved_by || 'ADMIN'),
+    }));
+  } catch {
+    return [];
+  }
+}
+

@@ -1,19 +1,5 @@
 import { Invoice, InvoiceItem, FinancialKPIs, ClosingDealItem, InvoiceStatus, NonSkuTransaction } from '@/lib/types/finance';
-import { getRawMasterInventory } from './inventory-repository';
-import { getGoogleSheetsInventory, updateGoogleSheetsStockStatus } from './google-sheets-inventory';
-
-import {
-  fetchGoogleSheetsInvoices,
-  appendGoogleSheetsInvoice,
-  updateGoogleSheetsInvoiceStatus,
-  updateGoogleSheetsInvoice,
-  deleteGoogleSheetsInvoice,
-  fetchGoogleSheetsNonSkuTransactions,
-  saveGoogleSheetsNonSkuTransaction,
-  deleteGoogleSheetsNonSkuTransaction,
-  parseToISODate,
-} from './google-sheets-invoices';
-import { resolveLocationFromCode, resolveHubCode } from './warehouse-utils';
+import { resolveLocationFromCode, resolveHubCode, parseToISODate } from './warehouse-utils';
 
 import {
   fetchTursoInvoices,
@@ -29,12 +15,13 @@ import {
   getTursoDispatchByInvoice,
   saveTursoDispatch,
   unlockTursoDispatchAcceptance,
+  saveTursoNonSkuTransaction,
+  fetchTursoNonSkuTransactions,
 } from './turso-finance-repository';
-import { updateTursoStockStatus } from './turso-inventory-repository';
+import { updateTursoStockStatus, fetchAllTursoMasterItems } from './turso-inventory-repository';
 import type { WarrantyRecord, WarrantyItemRecord, DeliveryDispatchRecord } from '@/lib/types/finance';
 
-
-// Clean Real Invoices store for BBKitchen (in-memory cache)
+// Clean Real Invoices store for BBKitchen (in-memory cache backed by Turso SQLite SSOT)
 let cachedInvoices: Invoice[] = [];
 
 export async function getInvoices(): Promise<Invoice[]> {
@@ -45,17 +32,7 @@ export async function getInvoices(): Promise<Invoice[]> {
       return cachedInvoices;
     }
   } catch (err) {
-    console.warn('Fallback from Turso to Google Sheets:', err);
-  }
-
-  try {
-    const sheetsInvoices = await fetchGoogleSheetsInvoices();
-    if (sheetsInvoices && sheetsInvoices.length > 0) {
-      cachedInvoices = sheetsInvoices;
-      return cachedInvoices;
-    }
-  } catch (err) {
-    console.warn('Fallback to in-memory invoices:', err);
+    console.warn('Turso invoices fetch warning:', err);
   }
   return [...cachedInvoices];
 }
@@ -67,14 +44,9 @@ export async function createInvoice(invoiceData: Omit<Invoice, 'id'>): Promise<I
   };
   cachedInvoices.unshift(newInvoice);
 
-  // Persist to Turso Edge Database
+  // Persist to Turso Edge Database SSOT
   await saveTursoInvoice(newInvoice).catch((e) =>
     console.warn('Turso invoice save warning:', e)
-  );
-
-  // Persist to Google Sheets INVOICE_ARCHIVE tab (legacy fallback)
-  await appendGoogleSheetsInvoice(newInvoice).catch((e) =>
-    console.warn('Google Sheets invoice append warning:', e)
   );
 
   return newInvoice;
@@ -90,14 +62,9 @@ export async function updateInvoice(invoice: Invoice): Promise<Invoice> {
     cachedInvoices.unshift(invoice);
   }
 
-  // Persist full update to Turso Edge Database
+  // Persist full update to Turso Edge Database SSOT
   await saveTursoInvoice(invoice).catch((e) =>
     console.warn('Turso invoice update warning:', e)
-  );
-
-  // Persist full update to Google Sheets (legacy fallback)
-  await updateGoogleSheetsInvoice(invoice).catch((e) =>
-    console.warn('Google Sheets full invoice update warning:', e)
   );
 
   return invoice;
@@ -241,16 +208,9 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
   }
 
   // Persist status update to Turso Edge Database
-  await updateTursoStatus(id, status).catch((e) =>
+  await updateTursoStatus(id, status).catch((e: any) =>
     console.warn('Turso invoice status update warning:', e)
   );
-
-  // Persist status update to Google Sheets (legacy fallback)
-  await updateGoogleSheetsInvoiceStatus(
-    id,
-    status,
-    status === 'PAID' ? todayStr : undefined
-  ).catch((e) => console.warn('Google Sheets invoice status update warning:', e));
 
   return true;
 }
@@ -300,13 +260,9 @@ export async function deleteInvoice(idOrNumber: string): Promise<boolean> {
     (inv) => inv.id !== idOrNumber && inv.invoiceNumber !== idOrNumber
   );
 
-  // Persist deletion to Turso Edge Database
+  // Persist deletion to Turso Edge Database SSOT
   await deleteTursoInv(idOrNumber).catch((e) =>
     console.warn('Turso invoice deletion warning:', e)
-  );
-
-  await deleteGoogleSheetsInvoice(idOrNumber).catch((e) =>
-    console.warn('Google Sheets invoice deletion warning:', e)
   );
 
   return true;
@@ -352,9 +308,9 @@ export async function getLiveClosingDealLedger(): Promise<{
   };
 }> {
   try {
-    const rawItems = await getGoogleSheetsInventory();
+    const rawItems = await fetchAllTursoMasterItems();
     const soldItems = rawItems.filter((i) => i.STATUS_UNIT === 'SOLD');
-    // 1. Fetch Google Sheets Inventory and Paid Invoices
+    // 1. Fetch Turso SQLite Inventory and Paid Invoices
     const matchedSkusSet = new Set<string>();
     const bbkInvoiceDeals: ClosingDealItem[] = [];
     let totalPhysicalUnitsSold = 0;
@@ -362,7 +318,7 @@ export async function getLiveClosingDealLedger(): Promise<{
     try {
       const realInvoices = await getInvoices();
       const paidInvoices = (realInvoices || []).filter((inv) => inv.status === 'PAID');
-      const nonSkuRecords = await fetchGoogleSheetsNonSkuTransactions().catch(() => []);
+      const nonSkuRecords = await fetchTursoNonSkuTransactions().catch(() => []);
 
       for (const inv of paidInvoices) {
         if (!inv.items || inv.items.length === 0) continue;
@@ -701,13 +657,13 @@ export async function resolveNonSkuItem(params: {
     targetItem.sku = params.targetSku.toUpperCase();
     await updateInvoice(targetInv);
 
-    // 2. Mark the target SKU as SOLD in Master Inventory
-    await updateGoogleSheetsStockStatus({
-      sku: params.targetSku,
-      status: 'SOLD',
-      dealPrice: targetItem.unitPrice,
-      notes: `Linked & Auto-marked from Invoice #${targetInv.invoiceNumber}`,
-    });
+    // 2. Mark the target SKU as SOLD in Turso Master Inventory
+    await updateTursoStockStatus(
+      params.targetSku,
+      'SOLD',
+      targetItem.unitPrice,
+      `Linked & Auto-marked from Invoice #${targetInv.invoiceNumber}`
+    );
 
     return true;
   }
@@ -727,7 +683,7 @@ export async function resolveNonSkuItem(params: {
     }
     await updateInvoice(targetInv);
 
-    // Save to TRANSAKSI_NON_SKU sheet
+    // Save to Turso non_sku_transactions table (SSOT)
     const tx: NonSkuTransaction = {
       id: `nonsku_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       invoiceNumber: targetInv.invoiceNumber,
@@ -749,7 +705,7 @@ export async function resolveNonSkuItem(params: {
       resolvedBy: 'ADMIN',
     };
 
-    await saveGoogleSheetsNonSkuTransaction(tx);
+    await saveTursoNonSkuTransaction(tx);
     return true;
   }
 

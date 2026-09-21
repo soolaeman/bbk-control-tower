@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryInventory, markUnitAsSold } from '@/lib/repositories/inventory-repository';
 import { UserRole } from '@/lib/types/auth';
-import { queryGoogleSheetsInventory, updateGoogleSheetsStockStatus } from '@/lib/repositories/google-sheets-inventory';
 import { queryTursoInventory, updateTursoStockStatus } from '@/lib/repositories/turso-inventory-repository';
 import { auth } from '@/auth';
 
@@ -31,87 +30,31 @@ export async function GET(request: NextRequest) {
     if (!session?.user?.role) return NextResponse.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
     const roleHeader = session.user.role as UserRole;
 
-    const rawSource = (process.env.BBK_INVENTORY_SOURCE || '').replace(/['"]/g, '').trim().toLowerCase();
-    const hasTursoConfig = Boolean(process.env.TURSO_DATABASE_URL || process.env.TURSO_AUTH_TOKEN);
-    const isTurso = rawSource === 'turso' || (rawSource !== 'google_sheets' && rawSource !== 'mock' && hasTursoConfig);
-
-    if (isTurso) {
-      const result = await queryTursoInventory(
-        {
-          search,
-          category,
-          location,
-          warehouse,
-          statusUnit,
-          statusPipeline,
-          guardrailStatus,
-          isDirty,
-          hasProductId,
-          minPrice,
-          maxPrice,
-          sortBy,
-          sortOrder,
-          page,
-          pageSize,
-        },
-        roleHeader
-      );
-      return NextResponse.json(result);
-    }
-
-    const hasSheetsConfig = Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
-    const isGoogleSheets = rawSource === 'google_sheets' || (rawSource !== 'mock' && hasSheetsConfig);
-
-    const result = isGoogleSheets
-      ? await queryGoogleSheetsInventory(
-          {
-            search,
-            category,
-            location,
-            warehouse,
-            statusUnit,
-            statusPipeline,
-            guardrailStatus,
-            isDirty,
-            hasProductId,
-            minPrice,
-            maxPrice,
-            sortBy,
-            sortOrder,
-            page,
-            pageSize,
-          },
-          roleHeader
-        )
-      : queryInventory(
-          {
-            search,
-            category,
-            location,
-            warehouse,
-            statusUnit,
-            statusPipeline,
-            guardrailStatus,
-            isDirty,
-            minPrice,
-            maxPrice,
-            sortBy,
-            sortOrder,
-            page,
-            pageSize,
-          },
-          roleHeader
-        );
-
+    // Direct Query to Turso SQLite SSOT
+    const result = await queryTursoInventory(
+      {
+        search,
+        category,
+        location,
+        warehouse,
+        statusUnit,
+        statusPipeline,
+        guardrailStatus,
+        isDirty,
+        hasProductId,
+        minPrice,
+        maxPrice,
+        sortBy,
+        sortOrder,
+        page,
+        pageSize,
+      },
+      roleHeader
+    );
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Inventory API Query Error:', error);
     return NextResponse.json(
-      {
-        error: error.message || 'Failed to query inventory',
-        source: process.env.BBK_INVENTORY_SOURCE,
-        hasSheetsId: Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID),
-      },
+      { error: error.message || 'Failed to query inventory' },
       { status: 500 }
     );
   }
@@ -136,91 +79,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'SKU is required' }, { status: 400 });
     }
 
-    const rawSource = (process.env.BBK_INVENTORY_SOURCE || '').replace(/['"]/g, '').trim().toLowerCase();
-    const hasTursoConfig = Boolean(process.env.TURSO_DATABASE_URL || process.env.TURSO_AUTH_TOKEN);
-    const isTurso = rawSource === 'turso' || (rawSource !== 'google_sheets' && rawSource !== 'mock' && hasTursoConfig);
-
     if (action === 'MARK_AS_SOLD' || status === 'SOLD' || action === 'UPDATE_STOCK_STATUS') {
-      if (isTurso) {
-        const tursoResult = await updateTursoStockStatus(
-          sku,
-          (status as any) || 'SOLD',
-          dealPrice ? Number(dealPrice) : undefined,
-          notes
-        );
-        if (!tursoResult.success) {
-          return NextResponse.json({ error: tursoResult.error }, { status: 404 });
-        }
-        return NextResponse.json({
-          success: true,
-          item: tursoResult.item,
-          message: `Unit ${sku} successfully updated to ${(status as any) || 'SOLD'} in Turso`,
-        });
+      const tursoResult = await updateTursoStockStatus(
+        sku,
+        (status as any) || 'SOLD',
+        dealPrice ? Number(dealPrice) : undefined,
+        notes
+      );
+      if (!tursoResult.success) {
+        return NextResponse.json({ error: tursoResult.error }, { status: 404 });
       }
-
-      const hasSheetsConfig = Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
-      const isGoogleSheets = rawSource === 'google_sheets' || (rawSource !== 'mock' && hasSheetsConfig);
-
-      if (isGoogleSheets) {
-        const gsResult = await updateGoogleSheetsStockStatus({
-          sku,
-          status: 'SOLD',
-          dealPrice: dealPrice ? Number(dealPrice) : undefined,
-          notes,
-        });
-
-        if (!gsResult.success) {
-          return NextResponse.json({ error: gsResult.error }, { status: 404 });
-        }
-
-        return NextResponse.json({
-          success: true,
-          message: `Unit ${sku} successfully marked as SOLD in Google Sheets`,
-        });
-      }
-
-      const result = markUnitAsSold(sku, dealPrice, notes);
-      if (!result.success) {
-        return NextResponse.json({ error: result.error }, { status: 404 });
-      }
-
-      return NextResponse.json({ success: true, item: result.item });
+      return NextResponse.json({
+        success: true,
+        item: tursoResult.item,
+        message: `Unit ${sku} successfully updated to ${(status as any) || 'SOLD'} in Turso SQLite SSOT`,
+      });
     }
 
     if (action === 'MARK_AS_READY' || status === 'READY') {
-      if (isTurso) {
-        const tursoResult = await updateTursoStockStatus(sku, 'READY', undefined, notes);
-        if (!tursoResult.success) {
-          return NextResponse.json({ error: tursoResult.error }, { status: 404 });
-        }
-        return NextResponse.json({
-          success: true,
-          item: tursoResult.item,
-          message: `Unit ${sku} successfully set to READY in Turso`,
-        });
+      const tursoResult = await updateTursoStockStatus(sku, 'READY', undefined, notes);
+      if (!tursoResult.success) {
+        return NextResponse.json({ error: tursoResult.error }, { status: 404 });
       }
-
-      const hasSheetsConfig = Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
-      const isGoogleSheets = rawSource === 'google_sheets' || (rawSource !== 'mock' && hasSheetsConfig);
-
-      if (isGoogleSheets) {
-        const gsResult = await updateGoogleSheetsStockStatus({
-          sku,
-          status: 'READY',
-          notes,
-        });
-
-        if (!gsResult.success) {
-          return NextResponse.json({ error: gsResult.error }, { status: 404 });
-        }
-
-        return NextResponse.json({
-          success: true,
-          message: `Unit ${sku} successfully marked as READY in Google Sheets`,
-        });
-      }
-
-      return NextResponse.json({ success: true, message: `Unit ${sku} set to READY (mock)` });
+      return NextResponse.json({
+        success: true,
+        item: tursoResult.item,
+        message: `Unit ${sku} successfully set to READY in Turso SQLite SSOT`,
+      });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

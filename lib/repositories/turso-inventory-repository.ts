@@ -409,3 +409,22 @@ export function dismissSoldRadarCandidate(sku: string): boolean {
   dismissedCandidates.add(sku.trim().toUpperCase());
   return true;
 }
+
+export async function fetchAllTursoMasterItems(role?: UserRole): Promise<MasterInventoryItem[]> {
+  const client = getTursoClient();
+  try {
+    const res = await client.execute(`
+      SELECT p.*, c.parent_name, c.child_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_slug = c.child_slug
+      ORDER BY p.tanggal_masuk DESC, p.sku DESC
+    `);
+    return res.rows.map((row) =>
+      maskItemForRole(mapRowToMasterItem(row as unknown as Record<string, any>), role)
+    );
+  } catch (err) {
+    console.error('Error fetching all master items from Turso:', err);
+    return [];
+  }
+}
+

@@ -9,6 +9,7 @@ import {
 } from '@/lib/types/inventory';
 import { UserRole, ROLE_PERMISSIONS } from '@/lib/types/auth';
 import { resolveLocationFromCode } from './warehouse-utils';
+import { fetchAllTursoMasterItems } from './turso-inventory-repository';
 
 // Official commercial kitchen equipment categories in Bukan Baru Kitchen
 const CATEGORIES = [
@@ -206,21 +207,15 @@ export function getRawMasterInventory(): MasterInventoryItem[] {
   return cachedInventory;
 }
 
-export async function getLiveMasterInventory(): Promise<MasterInventoryItem[]> {
-  const rawSource = (process.env.BBK_INVENTORY_SOURCE || '').replace(/['"]/g, '').trim().toLowerCase();
-  const hasSheetsConfig = Boolean(process.env.GOOGLE_SHEETS_SPREADSHEET_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
-  const isGoogleSheets = rawSource === 'google_sheets' || (rawSource !== 'mock' && hasSheetsConfig);
-
-  if (isGoogleSheets) {
-    try {
-      const { getGoogleSheetsInventory } = await import('./google-sheets-inventory');
-      const items = await getGoogleSheetsInventory();
-      if (items && items.length > 0) {
-        return items;
-      }
-    } catch (err) {
-      console.warn('Live Google Sheets fetch failed, falling back to local dataset:', err);
+export async function getLiveMasterInventory(role?: UserRole): Promise<MasterInventoryItem[]> {
+  try {
+    const items = await fetchAllTursoMasterItems(role);
+    if (items && items.length > 0) {
+      cachedInventory = items;
+      return items;
     }
+  } catch (err) {
+    console.warn('Turso live inventory fetch warning:', err);
   }
 
   return getRawMasterInventory();
