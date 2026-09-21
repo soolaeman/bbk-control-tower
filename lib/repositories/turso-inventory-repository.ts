@@ -289,7 +289,7 @@ export async function queryTursoInventory(
 
 export async function updateTursoStockStatus(
   sku: string,
-  newStatus: 'READY' | 'SOLD',
+  newStatus: 'READY' | 'SOLD' | 'BOOKED' | UnitStatus,
   dealPrice?: number,
   notes?: string
 ): Promise<{ success: boolean; item?: MasterInventoryItem; error?: string }> {

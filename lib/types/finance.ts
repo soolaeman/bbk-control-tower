@@ -11,9 +11,13 @@ export type InvoiceStatus =
   | 'ERROR';
 
 export type DocumentType =
-  | 'INVOICE'        // Faktur Penagihan Resmi
-  | 'QUOTATION'      // Surat Penawaran Harga Komersial
-  | 'DELIVERY_NOTE'; // Surat Jalan & Tanda Terima Ekspedisi/Driver (Hanya saat LUNAS)
+  | 'INVOICE'           // Faktur Penagihan Resmi
+  | 'QUOTATION'         // Surat Penawaran Harga Komersial (1x24 Jam)
+  | 'DELIVERY_NOTE'     // Surat Jalan & Tanda Terima Ekspedisi/Driver (Hanya saat LUNAS)
+  | 'WARRANTY'          // Kartu Garansi Resmi (E-Warranty)
+  | 'CANCELLATION_NOTE'; // Nota Pembatalan / Credit Note (Ihsan & Ta'widh)
+
+export type DocumentDeliveryStatus = 'NOT_SENT' | 'SENT' | 'OPENED';
 
 export interface PaymentRecord {
   id: string;
@@ -78,6 +82,11 @@ export interface Invoice {
   pdfUrl?: string;
   notes?: string;
   termsConditions?: string;
+  storageDeadline?: string; // Counter sisa hari Free Storage (maks. 7 hari pasca-lunas)
+  documentDeliveryStatus?: DocumentDeliveryStatus; // Not Sent | Sent | Opened ala Paper.id
+  holdingFeeAmount?: number; // Ta'widh / Holding fee 10% max Rp 1.000.000
+  refundAmount?: number; // Dana sisa DP yang ditransfer balik ke pembeli
+  quotationExpiresAt?: string; // Masa berlaku Quotation 1x24 jam
   createdBy: string;
 }
 
@@ -140,3 +149,65 @@ export interface FinancialKPIs {
   paidInvoicesAmount: number;
   inventoryAssetValue: number;
 }
+
+// ==========================================
+// 7 Logic Gates Domain Records (PLAN-BBK-04)
+// ==========================================
+
+export interface WarrantyItemRecord {
+  id: string;
+  warrantyId: string;
+  itemCode: string;
+  itemName: string;
+  itemCondition?: string;
+  warrantyEligible: boolean; // Gate 2: True (1) untuk Pendingin & Kompor, False (0) untuk Stainless Meja/Rak/Sink
+}
+
+export interface WarrantyRecord {
+  id: string;
+  warrantyNumber: string; // GAR-YYYY-XXXXX
+  invoiceNumber: string;
+  poNumber?: string;
+  customerName: string;
+  customerCompany?: string;
+  receivedAt: string; // Gate 3: Day 0 Timestamp dari delivered_at tanda tangan fisik E-POD
+  warrantyExpiresAt: string; // Day 14 timestamp (H+14)
+  publicExpiresAt: string; // Day 21 timestamp (H+21)
+  status: 'ACTIVE' | 'EXPIRED' | 'ARCHIVED';
+  items?: WarrantyItemRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DeliveryDispatchRecord {
+  id: string;
+  sjNumber: string; // SJ-BBK-YYYYMM-XXXX
+  invoiceNumber: string;
+  driverName?: string;
+  driverPhone?: string;
+  vehiclePlateReal?: string; // Gate 5: No Plat Fisik Real Mobil
+  ktpPhotoUrl?: string;      // Gate 5: Foto KTP Supir
+  platePhotoUrl?: string;    // Gate 5: Foto Plat Depan Mobil
+  loadingPhotoUrl?: string;  // Gate 5: Foto Unit Terikat di Bak
+  dispatchedAt?: string;
+  isUnlockedForAcceptance: boolean; // Gate 6: Remote Acceptance Gate (Kunci TTD di HP Penerima)
+  recipientNameAllowed?: string;
+  recipientName?: string;
+  recipientSignatureSvg?: string; // Gate 3 & 6: Tanda Tangan Jari Digital di Layar HP
+  arrivalPhotoUrl?: string;
+  deliveredAt?: string; // Gate 3: Day-0 Penguncian Garansi Resmi
+}
+
+export interface CancellationNote {
+  id: string;
+  invoiceNumber: string;
+  customerName: string;
+  cancelledAt: string;
+  totalAmount: number;
+  dpReceived: number;
+  holdingFee: number; // Gate 7: 10% Capped at Rp 1.000.000 (Ta'widh Ruang Fisik Gudang)
+  refundAmount: number; // Dana sisa DP yang ditransfer balik
+  reason: string;
+  approvedBy: string;
+}
+

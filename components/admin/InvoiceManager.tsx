@@ -57,6 +57,8 @@ export function InvoiceManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [commercialSubTab, setCommercialSubTab] = useState<'ALL' | 'QUOTATIONS' | 'ORDERS' | 'INVOICES' | 'DISPATCHES' | 'WARRANTIES'>('ALL');
+  const [personaMode, setPersonaMode] = useState<'RETAIL_WARM' | 'B2B_FORMAL'>('RETAIL_WARM');
 
   // Modal States
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -164,8 +166,43 @@ export function InvoiceManager() {
     ]);
   };
 
-  // 1-Click Convert Quotation to Invoice
+  // Void Invoice Handler (Gate 7: Ihsan & Ta'widh)
+  const handleVoidInvoice = async (inv: Invoice) => {
+    const holdingFee = Math.min(Math.round((inv.totalAmount || 0) * 0.1), 1000000);
+    const dpPaid = inv.dpAmount || 0;
+    const refund = Math.max(0, dpPaid - holdingFee);
+
+    const confirmMsg = `Konfirmasi Pembatalan Invoice ${inv.invoiceNumber}?\n\n• Total: ${formatIDR(inv.totalAmount)}\n• DP Masuk: ${formatIDR(dpPaid)}\n• Holding Fee (10% max Rp 1jt): -${formatIDR(holdingFee)}\n• Sisa Refund ke Pembeli: ${formatIDR(refund)}\n\nUnit fisik di gudang akan otomatis dilepas kembali menjadi READY di katalog publik. Lanjutkan?`;
+
+    if (window.confirm(confirmMsg)) {
+      try {
+        const res = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'UPDATE_STATUS', id: inv.id, status: 'VOID' }),
+        });
+        if (res.ok) {
+          loadInvoices();
+        }
+      } catch (e) {
+        console.error('Void invoice error:', e);
+      }
+    }
+  };
+
+  // 1-Click Convert Quotation to Invoice (Gate 1: Quotation 1x24j Check)
   const handleConvertQuotationToInvoice = (quotation: Invoice) => {
+    const issue = parseToISODate(quotation.issueDate) || quotation.issueDate;
+    if (issue) {
+      const diffHours = (Date.now() - new Date(issue).getTime()) / (1000 * 60 * 60);
+      if (diffHours > 24) {
+        const ok = window.confirm(
+          `⚠️ PERINGATAN KEDALUWARSA (Gate 1):\nQuotation ${quotation.quotationNumber || quotation.invoiceNumber} ini telah melewati batas waktu 1x24 jam.\n\nPastikan ketersediaan unit fisik di Gudang Pamulang belum terjual ke pembeli lain sebelum menerbitkan invoice.\n\nTetap lanjutkan konversi?`
+        );
+        if (!ok) return;
+      }
+    }
+
     setEditingInvoice(null);
     setFormDocType('INVOICE');
     setFormIssueDate(new Date().toISOString().split('T')[0]);
@@ -571,10 +608,28 @@ export function InvoiceManager() {
     }
   };
 
-  // Filter invoices for table
+  // Filter invoices for table with Commercial Sub-Tabs (Paper.id Paradigm)
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
-      const matchStatus = statusFilter === 'ALL' || inv.status === statusFilter;
+      // Commercial Sub-Tab filter
+      if (commercialSubTab === 'QUOTATIONS' && inv.documentType !== 'QUOTATION') return false;
+      if (commercialSubTab === 'ORDERS' && !inv.orderReference && !inv.customerCompany?.toLowerCase().includes('pt')) return false;
+      if (commercialSubTab === 'INVOICES' && inv.documentType !== 'INVOICE') return false;
+      if (commercialSubTab === 'DISPATCHES' && !inv.hasShipping && inv.status !== 'PAID') return false;
+      if (commercialSubTab === 'WARRANTIES' && inv.status !== 'PAID') return false;
+
+      // Status filter
+      let matchStatus = true;
+      if (statusFilter === 'PAID') {
+        matchStatus = inv.status === 'PAID';
+      } else if (statusFilter === 'DP_PAID') {
+        matchStatus = inv.status === 'DP_PAID';
+      } else if (statusFilter === 'UNPAID') {
+        matchStatus = inv.status !== 'PAID' && inv.status !== 'DP_PAID' && inv.status !== 'VOID';
+      } else if (statusFilter === 'VOID') {
+        matchStatus = inv.status === 'VOID';
+      }
+
       const matchType = typeFilter === 'ALL' || inv.documentType === typeFilter;
       const q = searchQuery.toLowerCase().trim();
       const matchQ =
@@ -583,11 +638,13 @@ export function InvoiceManager() {
         (inv.quotationNumber && inv.quotationNumber.toLowerCase().includes(q)) ||
         inv.customerName.toLowerCase().includes(q) ||
         (inv.customerPhone && inv.customerPhone.toLowerCase().includes(q)) ||
+        (inv.orderReference && inv.orderReference.toLowerCase().includes(q)) ||
+        (inv.customerCompany && inv.customerCompany.toLowerCase().includes(q)) ||
         inv.items.some((i) => i.description.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q));
 
       return matchStatus && matchType && matchQ;
     });
-  }, [invoices, statusFilter, typeFilter, searchQuery]);
+  }, [invoices, statusFilter, typeFilter, searchQuery, commercialSubTab]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -653,13 +710,45 @@ export function InvoiceManager() {
         </div>
       </div>
 
+      {/* COMMERCIAL DESK SUB-TABS (PAPER.ID PARADIGM) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bg-slate-900/60 p-2 rounded-2xl border border-slate-800 text-xs">
+        {[
+          { id: 'ALL', label: '📑 Semua Dokumen', count: invoices.length },
+          { id: 'QUOTATIONS', label: '📄 Quotation (1x24j)', count: invoices.filter((i) => i.documentType === 'QUOTATION').length },
+          { id: 'ORDERS', label: '📋 Order (PO/SO)', count: invoices.filter((i) => i.orderReference || i.customerCompany?.toLowerCase().includes('pt')).length },
+          { id: 'INVOICES', label: '🧾 Invoice Penjualan', count: invoices.filter((i) => i.documentType === 'INVOICE').length },
+          { id: 'DISPATCHES', label: '🚚 Surat Jalan (E-POD)', count: invoices.filter((i) => i.hasShipping || i.status === 'PAID').length },
+          { id: 'WARRANTIES', label: '🛡️ E-Warranty (14 Hari)', count: invoices.filter((i) => i.status === 'PAID').length },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setCommercialSubTab(tab.id as any)}
+            className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+              commercialSubTab === tab.id
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-slate-950 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
+            }`}
+          >
+            <span>{tab.label}</span>
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                commercialSubTab === tab.id ? 'bg-slate-950/30 text-slate-950' : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* FILTER & SEARCH */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
         <div>
           <label className="block text-slate-400 font-bold mb-1">🔍 Cari Dokumen:</label>
           <input
             type="text"
-            placeholder="Cari No. Dokumen, Pembeli, SKU..."
+            placeholder="Cari No. Dokumen, PO/Ref, Pembeli, SKU..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
@@ -680,16 +769,17 @@ export function InvoiceManager() {
         </div>
 
         <div>
-          <label className="block text-slate-400 font-bold mb-1">📌 Status Transaksi:</label>
+          <label className="block text-slate-400 font-bold mb-1">📌 Status Transaksi (Paper.id):</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold text-xs"
           >
-            <option value="ALL">Semua Status</option>
-            <option value="PAID">✓ Lunas Penuh</option>
-            <option value="DP_PAID">⏳ Pembayaran Bertahap (DP)</option>
-            <option value="GENERATED">Terbit (Unpaid)</option>
+            <option value="ALL">Semua Status Pembayaran</option>
+            <option value="PAID">✓ Paid (Lunas Penuh)</option>
+            <option value="DP_PAID">⏳ Partially Paid (DP 30%)</option>
+            <option value="UNPAID">⚠️ Unpaid (Belum Bayar)</option>
+            <option value="VOID">🚫 Dibatalkan (Void / Refund)</option>
           </select>
         </div>
       </div>
@@ -778,23 +868,56 @@ export function InvoiceManager() {
                       </td>
                       <td className="py-3 px-3.5 text-center">
                         {inv.documentType === 'QUOTATION' ? (
-                          /* RULE 3: Quotation jangan ada lunas / ga lunas */
-                          <span className="inline-block px-2.5 py-0.5 bg-blue-950 text-blue-300 border border-blue-800 rounded-full text-[10px] font-bold">
-                            📋 PENAWARAN AKTIF
-                          </span>
-                        ) : isPaid ? (
-                          <span className="inline-block px-2.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-full text-[10px] font-bold">
-                            ✓ LUNAS
-                          </span>
-                        ) : (
+                          (() => {
+                            const issue = parseToISODate(inv.issueDate) || inv.issueDate;
+                            const isExpired = issue
+                              ? (Date.now() - new Date(issue).getTime()) / (1000 * 60 * 60) > 24
+                              : false;
+                            return isExpired ? (
+                              <span className="inline-block px-2.5 py-0.5 bg-rose-950 text-rose-300 border border-rose-800 rounded-full text-[10px] font-bold">
+                                ⚠️ EXPIRED (&gt;24j)
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-full text-[10px] font-bold">
+                                📋 VALID (1x24j)
+                              </span>
+                            );
+                          })()
+                        ) : inv.status === 'VOID' ? (
                           <div className="space-y-0.5">
-                            <span className="inline-block px-2 py-0.5 bg-amber-950 text-amber-300 border border-amber-800 rounded-full text-[10px] font-bold">
-                              ⏳ Sisa {formatIDR(invRemaining)}
+                            <span className="inline-block px-2.5 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-800 rounded-full text-[10px] font-bold">
+                              🚫 VOID (BATAL)
                             </span>
-                            {invPaid > 0 && (
-                              <p className="text-[9px] text-slate-400 font-mono">Masuk: {formatIDR(invPaid)}</p>
+                            {inv.refundAmount != null && (
+                              <p className="text-[9px] text-slate-400 font-mono">
+                                Refund: {formatIDR(inv.refundAmount)}
+                              </p>
                             )}
                           </div>
+                        ) : isPaid ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-block px-2.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded-full text-[10px] font-bold">
+                              ✓ PAID (LUNAS)
+                            </span>
+                            {inv.storageDeadline && (
+                              <p className="text-[9px] text-amber-400 font-mono">
+                                Storage: s.d {inv.storageDeadline}
+                              </p>
+                            )}
+                          </div>
+                        ) : invPaid > 0 ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-block px-2.5 py-0.5 bg-blue-950 text-blue-300 border border-blue-800 rounded-full text-[10px] font-bold">
+                              ⏳ PARTIALLY PAID
+                            </span>
+                            <p className="text-[9px] text-slate-400 font-mono">
+                              Masuk: {formatIDR(invPaid)} • Sisa: {formatIDR(invRemaining)}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="inline-block px-2.5 py-0.5 bg-amber-950 text-amber-300 border border-amber-800 rounded-full text-[10px] font-bold">
+                            ⚠️ UNPAID
+                          </span>
                         )}
                       </td>
                       <td className="py-3 px-3.5 text-center">
@@ -857,21 +980,38 @@ export function InvoiceManager() {
                                 <span>Invoice</span>
                               </button>
 
-                              {/* RULE 4: Surat jalan gabisa ada sebelum lunas */}
+                              {/* Surat Jalan (Hanya Lunas) */}
                               {isPaid ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedInvoice(inv);
-                                    setDocumentModalType('DELIVERY_NOTE');
-                                    setIsDocModalOpen(true);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 transition-colors"
-                                  title="Cetak Surat Jalan Pengiriman (Invoice Sudah Lunas)"
-                                >
-                                  <Truck className="w-3 h-3" />
-                                  <span>Surat Jalan</span>
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedInvoice(inv);
+                                      setDocumentModalType('DELIVERY_NOTE');
+                                      setIsDocModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 transition-colors"
+                                    title="Cetak Surat Jalan Pengiriman (Invoice Sudah Lunas)"
+                                  >
+                                    <Truck className="w-3 h-3" />
+                                    <span>Surat Jalan</span>
+                                  </button>
+
+                                  {/* E-Warranty */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedInvoice(inv);
+                                      setDocumentModalType('WARRANTY');
+                                      setIsDocModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 text-xs font-bold border border-teal-500/30 transition-colors"
+                                    title="Cetak Kartu Garansi Digital 14 Hari"
+                                  >
+                                    <ShieldCheck className="w-3 h-3 text-teal-400" />
+                                    <span>Garansi</span>
+                                  </button>
+                                </>
                               ) : (
                                 <button
                                   type="button"
@@ -881,6 +1021,33 @@ export function InvoiceManager() {
                                 >
                                   <Lock className="w-3 h-3 text-slate-500" />
                                   <span>Surat Jalan</span>
+                                </button>
+                              )}
+
+                              {/* Void Action */}
+                              {inv.status !== 'VOID' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVoidInvoice(inv)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/30 transition-colors"
+                                  title="Batalkan Invoice (Holding Fee 10% max Rp 1jt + Auto Catat Refund Bank Jago)"
+                                >
+                                  <X className="w-3 h-3 text-rose-400" />
+                                  <span>Void</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedInvoice(inv);
+                                    setDocumentModalType('CANCELLATION_NOTE');
+                                    setIsDocModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/40 transition-colors"
+                                  title="Cetak Surat Keterangan Batal & Refund (Credit Note)"
+                                >
+                                  <X className="w-3 h-3" />
+                                  <span>Credit Note</span>
                                 </button>
                               )}
 

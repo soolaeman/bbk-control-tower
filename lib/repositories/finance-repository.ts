@@ -20,7 +20,19 @@ import {
   saveTursoInvoice,
   updateTursoInvoiceStatus as updateTursoStatus,
   deleteTursoInvoice as deleteTursoInv,
+  fetchTursoWarranties,
+  getTursoWarrantyByNumber,
+  getTursoWarrantyByInvoice,
+  saveTursoWarranty,
+  fetchTursoDispatches,
+  getTursoDispatchBySjNumber,
+  getTursoDispatchByInvoice,
+  saveTursoDispatch,
+  unlockTursoDispatchAcceptance,
 } from './turso-finance-repository';
+import { updateTursoStockStatus } from './turso-inventory-repository';
+import type { WarrantyRecord, DeliveryDispatchRecord } from '@/lib/types/finance';
+
 
 // Clean Real Invoices store for BBKitchen (in-memory cache)
 let cachedInvoices: Invoice[] = [];
@@ -93,11 +105,64 @@ export async function updateInvoice(invoice: Invoice): Promise<Invoice> {
 
 export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Promise<boolean> {
   const index = cachedInvoices.findIndex((inv) => inv.id === id || inv.invoiceNumber === id);
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
   if (index !== -1) {
-    cachedInvoices[index].status = status;
-    if (status === 'PAID') {
-      cachedInvoices[index].paidDate = new Date().toISOString().split('T')[0];
+    const inv = cachedInvoices[index];
+    inv.status = status;
+
+    if (status === 'DP_PAID') {
+      // Gate 4: Storage Tracker (Maksimal 7 hari free storage pasca booking/DP)
+      const deadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      inv.storageDeadline = deadline.toISOString().split('T')[0];
+
+      // Hook Inventori: Otomatis kunci unit fisik menjadi BOOKED
+      if (inv.items && inv.items.length > 0) {
+        for (const item of inv.items) {
+          if (item.sku && !item.sku.startsWith('NON-SKU')) {
+            await updateTursoStockStatus(item.sku, 'BOOKED').catch((e) =>
+              console.warn(`Gagal update unit ${item.sku} ke BOOKED:`, e)
+            );
+          }
+        }
+      }
+    } else if (status === 'PAID') {
+      inv.paidDate = todayStr;
+
+      // Hook Inventori: Otomatis kunci unit fisik menjadi SOLD
+      if (inv.items && inv.items.length > 0) {
+        for (const item of inv.items) {
+          if (item.sku && !item.sku.startsWith('NON-SKU')) {
+            await updateTursoStockStatus(item.sku, 'SOLD', item.unitPrice).catch((e) =>
+              console.warn(`Gagal update unit ${item.sku} ke SOLD:`, e)
+            );
+          }
+        }
+      }
+    } else if (status === 'VOID') {
+      // Gate 7: Ihsan & Ta'widh (Holding fee 10% capped at Rp 1.000.000)
+      const holdingFee = Math.min(Math.round((inv.totalAmount || 0) * 0.1), 1000000);
+      const dpPaid = inv.dpAmount || 0;
+      inv.holdingFeeAmount = holdingFee;
+      inv.refundAmount = Math.max(0, dpPaid - holdingFee);
+
+      // Hook Inventori: Lepas kembali unit fisik menjadi READY di katalog publik
+      if (inv.items && inv.items.length > 0) {
+        for (const item of inv.items) {
+          if (item.sku && !item.sku.startsWith('NON-SKU')) {
+            await updateTursoStockStatus(item.sku, 'READY').catch((e) =>
+              console.warn(`Gagal lepas unit ${item.sku} ke READY:`, e)
+            );
+          }
+        }
+      }
     }
+
+    // Persist full state ke Turso
+    await saveTursoInvoice(inv).catch((e) =>
+      console.warn('Turso full invoice status sync warning:', e)
+    );
   }
 
   // Persist status update to Turso Edge Database
@@ -109,10 +174,50 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
   await updateGoogleSheetsInvoiceStatus(
     id,
     status,
-    status === 'PAID' ? new Date().toISOString().split('T')[0] : undefined
+    status === 'PAID' ? todayStr : undefined
   ).catch((e) => console.warn('Google Sheets invoice status update warning:', e));
 
   return true;
+}
+
+// ==========================================
+// WARRANTIES & DISPATCH HELPER EXPORTS
+// ==========================================
+
+export async function getWarranties(): Promise<WarrantyRecord[]> {
+  return fetchTursoWarranties();
+}
+
+export async function getWarrantyByNumber(warrantyNumber: string): Promise<WarrantyRecord | null> {
+  return getTursoWarrantyByNumber(warrantyNumber);
+}
+
+export async function getWarrantyByInvoice(invoiceNumber: string): Promise<WarrantyRecord | null> {
+  return getTursoWarrantyByInvoice(invoiceNumber);
+}
+
+export async function saveWarranty(warranty: WarrantyRecord): Promise<void> {
+  return saveTursoWarranty(warranty);
+}
+
+export async function getDispatches(): Promise<DeliveryDispatchRecord[]> {
+  return fetchTursoDispatches();
+}
+
+export async function getDispatchBySjNumber(sjNumber: string): Promise<DeliveryDispatchRecord | null> {
+  return getTursoDispatchBySjNumber(sjNumber);
+}
+
+export async function getDispatchByInvoice(invoiceNumber: string): Promise<DeliveryDispatchRecord | null> {
+  return getTursoDispatchByInvoice(invoiceNumber);
+}
+
+export async function saveDispatch(dispatch: DeliveryDispatchRecord): Promise<void> {
+  return saveTursoDispatch(dispatch);
+}
+
+export async function unlockDispatchAcceptance(sjNumber: string): Promise<boolean> {
+  return unlockTursoDispatchAcceptance(sjNumber);
 }
 
 export async function deleteInvoice(idOrNumber: string): Promise<boolean> {

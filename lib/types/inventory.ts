@@ -1,6 +1,6 @@
 // Shared Domain Types for Bukan Baru Kitchen (BBK) Control Tower & Public System
 
-export type UnitStatus = 'READY' | 'SOLD' | 'AVAILABLE' | 'AMBIGUOUS';
+export type UnitStatus = 'READY' | 'SOLD' | 'AVAILABLE' | 'AMBIGUOUS' | 'BOOKED';
 
 export type PipelineStatus =
   | 'PENDING_PHOTOS'
