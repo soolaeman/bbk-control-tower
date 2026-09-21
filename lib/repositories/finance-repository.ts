@@ -452,11 +452,12 @@ export async function getLiveClosingDealLedger(): Promise<{
     const thirdPartyDeals: ClosingDealItem[] = soldItems
       .filter((item) => !matchedSkusSet.has(item.SKU.trim().toUpperCase()))
       .map((item) => {
-        const modal = item.HARGA_MODAL || 0;
-        const closing = modal;
+        // Priority: HARGA_DEAL_WA -> HARGA_BUKA_WA -> HARGA_MODAL -> 0
+        const closing = item.HARGA_DEAL_WA || item.HARGA_BUKA_WA || item.HARGA_MODAL || 0;
+        const modal = item.HARGA_MODAL || closing;
 
-        // Convert serial date or raw string to ISO YYYY-MM-DD
-        const cleanInDate = parseToISODate(item.TANGGAL_MASUK);
+        // Convert serial date or raw string to ISO YYYY-MM-DD (fallback to inDate if soldDate missing)
+        const cleanInDate = parseToISODate(item.TANGGAL_MASUK) || '2025-01-01';
         const cleanSoldDate = parseToISODate(item.TANGGAL_TERJUAL) || cleanInDate;
 
         const agingNum = typeof item.DURASI_TERJUAL === 'number'
@@ -469,8 +470,8 @@ export async function getLiveClosingDealLedger(): Promise<{
           sku: item.SKU,
           productTitle: item.PRODUCT_TITLE,
           category: item.CATEGORY_NAME || item.CATEGORY_SLUG || '',
-          tanggalMasuk: cleanInDate || item.TANGGAL_MASUK,
-          tanggalTerjual: cleanSoldDate || cleanInDate || undefined,
+          tanggalMasuk: cleanInDate,
+          tanggalTerjual: cleanSoldDate,
           durasiTerjual: `${agingNum} hari`,
           lokasiGudang: item.LOKASI_UNIT,
           asalGudang: item.asal_gudang || 'GK',
@@ -487,11 +488,11 @@ export async function getLiveClosingDealLedger(): Promise<{
     // 3. Combine All Deals (BBKitchen Invoice Deals + Third Party Deals)
     const deals: ClosingDealItem[] = [...bbkInvoiceDeals, ...thirdPartyDeals];
 
-    // Recalculate Totals (Only direct BBKitchen sales contribute to revenue & profit)
+    // Recalculate Totals (Total ecosystem turnover + direct BBKitchen profit)
     const bbkDeals = deals.filter((d) => d.soldBy === 'SALES_BBK');
-    const totalRevenue = bbkDeals.reduce((sum, d) => sum + d.hargaClosing, 0);
+    const totalRevenue = deals.reduce((sum, d) => sum + d.hargaClosing, 0);
     const totalProfit = bbkDeals.reduce((sum, d) => sum + d.realizedProfit, 0);
-    totalPhysicalUnitsSold = bbkDeals.reduce((sum, d) => sum + (d.quantity || 1), 0);
+    totalPhysicalUnitsSold = deals.reduce((sum, d) => sum + (d.quantity || 1), 0);
     const bbkSalesCount = bbkDeals.length;
     const thirdPartyCount = deals.filter((d) => d.soldBy === 'THIRD_PARTY').length;
 

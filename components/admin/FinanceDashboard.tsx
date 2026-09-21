@@ -49,6 +49,7 @@ import {
   CheckCircle2,
   Link2,
   ArrowUp,
+  Sparkles,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -109,6 +110,23 @@ export function FinanceDashboard() {
   const [resolveItem, setResolveItem] = useState<NonSkuResolveItem | null>(null);
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
 
+  // Direct SQLite Aggregation State (Excel Formula Engine)
+  const [sqliteStats, setSqliteStats] = useState<{
+    totalUnits: number;
+    soldCount: number;
+    soldValuation: number;
+    readyCount: number;
+    readyValuation: number;
+    readyCapitalModal: number;
+    effectiveRevenue: number;
+    effectiveDeals: number;
+    effectiveProfit: number;
+    grossMarginPct: number;
+    directInvoicedRevenue: number;
+    directCashIn: number;
+    directPaidDealsCount: number;
+  } | null>(null);
+
   // Pagination for Closing Deal Ledger
   const [dealPage, setDealPage] = useState(1);
   const [dealPageSize, setDealPageSize] = useState(25);
@@ -161,19 +179,39 @@ export function FinanceDashboard() {
   const loadData = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/invoices', {
-        headers: { ...(role ? { 'x-bbk-role': role } : {}) },
-      });
-      const data = await res.json();
+      const statsParams = new URLSearchParams();
+      statsParams.set('channel', channelFilter);
+      if (categoryFilter !== 'ALL') statsParams.set('category', categoryFilter);
+      if (warehouseFilter !== 'ALL') statsParams.set('warehouse', warehouseFilter);
+      if (startDate) statsParams.set('startDate', startDate);
+      if (endDate) statsParams.set('endDate', endDate);
+
+      const [resInvoices, resStats] = await Promise.all([
+        fetch('/api/invoices', {
+          headers: { ...(role ? { 'x-bbk-role': role } : {}) },
+        }),
+        fetch(`/api/finance/overview-stats?${statsParams.toString()}`, {
+          headers: { ...(role ? { 'x-bbk-role': role } : {}) },
+        }).catch(() => null),
+      ]);
+
+      const data = await resInvoices.json();
       if (data.deals) setDeals(data.deals);
       if (data.inventorySummary) setInventoryItems(data.inventorySummary);
+
+      if (resStats && resStats.ok) {
+        const statsData = await resStats.json();
+        if (statsData.success && statsData.kpis) {
+          setSqliteStats(statsData.kpis);
+        }
+      }
     } catch (err) {
       console.error('Failed to load finance data', err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [role]);
+  }, [role, channelFilter, categoryFilter, warehouseFilter, startDate, endDate]);
 
   useEffect(() => {
     loadData();
@@ -374,6 +412,29 @@ export function FinanceDashboard() {
 
   // 3. FINANCIAL HEALTH METRICS
   const healthKPIs = useMemo(() => {
+    if (sqliteStats) {
+      const isDirect = channelFilter === 'SALES_BBK';
+      const revenue = isDirect ? sqliteStats.directInvoicedRevenue : sqliteStats.soldValuation;
+      const profit = isDirect ? sqliteStats.effectiveProfit : 0;
+      const grossMarginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
+      const totalDeals = isDirect ? sqliteStats.directPaidDealsCount : sqliteStats.soldCount;
+      const unitsSold = isDirect ? sqliteStats.directPaidDealsCount : sqliteStats.soldCount;
+      const bbkSalesCount = sqliteStats.directPaidDealsCount;
+      const thirdPartyCount = Math.max(0, sqliteStats.soldCount - sqliteStats.directPaidDealsCount);
+      const totalCogs = sqliteStats.readyCapitalModal;
+
+      return {
+        revenue,
+        grossProfit: profit,
+        grossMarginPct,
+        totalDeals,
+        bbkSalesCount,
+        thirdPartyCount,
+        unitsSold,
+        totalCogs,
+      };
+    }
+
     let revenue = 0;
     let profit = 0;
     let bbkSalesCount = 0;
@@ -408,7 +469,7 @@ export function FinanceDashboard() {
       unitsSold,
       totalCogs,
     };
-  }, [filteredDeals, warehouseFilter, categoryFilter, getDealFilteredMetrics]);
+  }, [sqliteStats, channelFilter, filteredDeals, warehouseFilter, categoryFilter, getDealFilteredMetrics]);
 
   // 4. GROWTH CALCULATIONS (COMPARED TO PREVIOUS PERIOD)
   const growthKPIs = useMemo(() => {
@@ -1133,45 +1194,91 @@ export function FinanceDashboard() {
       </div>
 
       {/* ========================================================================= */}
+      {/* ACTIONABLE INSIGHTS BAR (HIGH-INTENT RADAR) */}
+      {/* ========================================================================= */}
+      <div className="p-3.5 bg-gradient-to-r from-emerald-950/60 via-slate-900/90 to-sky-950/60 border border-emerald-800/40 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-lg">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div>
+            <h3 className="font-bold text-white text-xs flex items-center gap-1.5">
+              <span>Sovereign Executive Radar</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">Pareto 80/20</span>
+            </h3>
+            <p className="text-[11px] text-slate-400">
+              {channelFilter === 'ALL'
+                ? 'Mode Ekosistem: Menampilkan total perputaran unit 13 gudang rekanan & valuasi pasokan pasar.'
+                : 'Mode Direct BBKitchen: Menampilkan omset kas masuk Bank Jago & laba bersih transaksi kita.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="px-2.5 py-1 bg-slate-950/80 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-300">
+            ⚡ Transaksi: <strong className="text-emerald-400 font-bold">{healthKPIs.totalDeals}</strong> Deals
+          </div>
+          <div className="px-2.5 py-1 bg-slate-950/80 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-300">
+            📦 Fisik: <strong className="text-sky-400 font-bold">{healthKPIs.unitsSold}</strong> Unit
+          </div>
+          <div className="px-2.5 py-1 bg-slate-950/80 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-300">
+            🛡️ Garansi: <strong className="text-amber-400 font-bold">14 Hari</strong> Ihsan
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
       {/* 1. FINANCIAL HEALTH (REVENUE, GROSS PROFIT, MARGIN, ORDERS, UNITS) */}
       {/* ========================================================================= */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>1. Financial Health (Kesehatan Finansial)</span>
+            <span>1. Financial Health (Kesehatan Finansial & Perputaran)</span>
           </h2>
           <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-800 text-emerald-400 font-mono font-bold">
-            Realized Closing Data
+            {channelFilter === 'ALL' ? 'Ecosystem Market Circulation' : 'BBKitchen Direct Ledger'}
           </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Revenue */}
           <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Penjualan (Revenue)</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              {channelFilter === 'ALL' ? 'Total Nilai Pasar (13 Hub)' : 'Omset Direct BBKitchen'}
+            </span>
             <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">
               {formatIDR(healthKPIs.revenue)}
             </div>
-            <p className="text-[10px] text-slate-500">Closing Sales WhatsApp</p>
+            <p className="text-[10px] text-slate-500">
+              {channelFilter === 'ALL' ? 'Perputaran Jaringan Mitra' : 'Faktur Resmi Bank Jago'}
+            </p>
           </div>
 
           {/* Gross Profit */}
           <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Gross Profit (Laba Kotor)</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              {channelFilter === 'ALL' ? 'Laba Bersih BBKitchen' : 'Gross Profit Direct'}
+            </span>
             <div className="text-lg sm:text-xl font-black text-amber-400 font-mono">
               {formatIDR(healthKPIs.grossProfit)}
             </div>
-            <p className="text-[10px] text-slate-500">Laba Bersih Realisasi</p>
+            <p className="text-[10px] text-slate-500">
+              {channelFilter === 'ALL'
+                ? (healthKPIs.grossProfit > 0 ? 'Laba deal direct terhitung' : 'Filter Sales WA untuk laba direct')
+                : 'Laba Bersih Realisasi'}
+            </p>
           </div>
 
           {/* Gross Margin */}
           <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-2xl space-y-1">
             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Gross Margin %</span>
             <div className="text-lg sm:text-xl font-black text-purple-400 font-mono">
-              {healthKPIs.grossMarginPct}%
+              {channelFilter === 'ALL' && healthKPIs.grossProfit === 0 ? '0%' : `${healthKPIs.grossMarginPct}%`}
             </div>
-            <p className="text-[10px] text-slate-500">Persentase Margin Rata-rata</p>
+            <p className="text-[10px] text-slate-500">
+              {channelFilter === 'ALL' ? 'Volume Rekanan Mitra' : 'Margin Bersih BBKitchen'}
+            </p>
           </div>
 
           {/* Closing Deals / Orders */}
@@ -1180,7 +1287,7 @@ export function FinanceDashboard() {
             <div className="text-lg sm:text-xl font-black text-white font-mono">
               {healthKPIs.totalDeals} <span className="text-xs font-normal text-slate-400">Deals</span>
             </div>
-            <p className="text-[10px] text-slate-500">{healthKPIs.bbkSalesCount} WA • {healthKPIs.thirdPartyCount} Rekanan</p>
+            <p className="text-[10px] text-slate-500">{healthKPIs.bbkSalesCount} WA Direct • {healthKPIs.thirdPartyCount} Mitra</p>
           </div>
 
           {/* Units Sold */}
@@ -1189,7 +1296,7 @@ export function FinanceDashboard() {
             <div className="text-lg sm:text-xl font-black text-blue-400 font-mono">
               {healthKPIs.unitsSold} <span className="text-xs font-normal text-slate-400">Unit</span>
             </div>
-            <p className="text-[10px] text-slate-500">Unit Fisik Terkirim</p>
+            <p className="text-[10px] text-slate-500">Fisik Terverifikasi Keluar</p>
           </div>
         </div>
 

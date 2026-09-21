@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/auth-context';
 import { RoleSwitcher } from '@/components/admin/RoleSwitcher';
-import { OverviewDashboard } from '@/components/admin/OverviewDashboard';
 import { InventoryTable } from '@/components/admin/InventoryTable';
 import { PipelineMonitor } from '@/components/admin/PipelineMonitor';
 import { InvoiceManager } from '@/components/admin/InvoiceManager';
@@ -196,13 +195,15 @@ export default function AdminPage() {
 
         <div className="flex items-center gap-4">
           <RoleSwitcher />
-          <Link
-            href="/"
+          <a
+            href="https://bukanbarukitchen.com"
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-white/60 hover:text-white flex items-center gap-1 font-mono text-xs transition-colors"
           >
             <span>Public Catalog</span>
             <ExternalLink className="w-3 h-3" />
-          </Link>
+          </a>
         </div>
       </div>
 

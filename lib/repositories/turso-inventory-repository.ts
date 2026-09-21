@@ -253,7 +253,7 @@ export async function queryTursoInventory(
 
   // Pagination
   const page = Math.max(1, options.page || 1);
-  const pageSize = Math.max(5, Math.min(100, options.pageSize || 25));
+  const pageSize = options.pageSize && options.pageSize > 0 ? Math.min(5000, options.pageSize) : 25;
   const offset = (page - 1) * pageSize;
 
   const selectSql = `
