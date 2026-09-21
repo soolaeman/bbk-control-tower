@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   CreditCard,
   Calendar,
+  UserCheck,
 } from 'lucide-react';
 
 interface DocumentItemRow {
@@ -90,6 +91,44 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [customerCompany, setCustomerCompany] = useState('');
+
+  // Customer CRM Live Autocomplete states
+  const [customerSuggestions, setCustomerSuggestions] = useState<any[]>([]);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+  const handleCustomerSearch = async (query: string) => {
+    setCustomerName(query);
+    if (!query || query.trim().length < 2) {
+      setCustomerSuggestions([]);
+      setShowCustomerDropdown(false);
+      return;
+    }
+
+    setIsSearchingCustomer(true);
+    try {
+      const res = await fetch(`/api/customers?search=${encodeURIComponent(query.trim())}&pageSize=6`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.customers && Array.isArray(data.customers)) {
+          setCustomerSuggestions(data.customers);
+          setShowCustomerDropdown(data.customers.length > 0);
+        }
+      }
+    } catch (e) {
+      console.warn('Customer autocomplete fetch warning:', e);
+    } finally {
+      setIsSearchingCustomer(false);
+    }
+  };
+
+  const handleSelectCustomer = (cust: any) => {
+    setCustomerName(cust.name || '');
+    setCustomerPhone(cust.phone || '');
+    setCustomerCompany(cust.company_name || '');
+    setCustomerAddress(cust.address || '');
+    setShowCustomerDropdown(false);
+  };
 
   // Multi-Item Rows
   const [itemRows, setItemRows] = useState<DocumentItemRow[]>([
@@ -1050,6 +1089,18 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
                                   <span>Invoice</span>
                                 </button>
 
+                                {/* Single Customer Journey Smart Link */}
+                                <a
+                                  href={`/deal/${encodeURIComponent(inv.invoiceNumber)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-xs font-bold border border-indigo-500/30 transition-colors"
+                                  title="Buka Single Customer Journey 4-Tahap (Invoice Jago CBD ➔ Armada Dispatch ➔ E-POD Sign-on-Glass ➔ E-Warranty 14 Hari)"
+                                >
+                                  <ExternalLink className="w-3 h-3 text-indigo-400" />
+                                  <span>Smart Link</span>
+                                </a>
+
                                 {/* Surat Jalan (Hanya Lunas) */}
                                 {isPaid ? (
                                   <>
@@ -1257,10 +1308,17 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
 
               {/* 2. CUSTOMER & DESTINATION INFO */}
               <div className="p-4 bg-slate-950/70 border border-slate-800/80 rounded-xl space-y-3">
-                <span className="font-bold text-slate-300 uppercase tracking-wider text-[10px] block">
-                  👤 Informasi Pembeli & Alamat Pengiriman
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-300 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Informasi Pembeli & CRM Database</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    Ketik nama untuk auto-complete dari database customer
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-slate-400 font-semibold mb-1">
                       📅 Tanggal Dokumen *
@@ -1273,19 +1331,52 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-200 focus:ring-1 focus:ring-amber-500 font-mono text-xs"
                     />
                   </div>
-                  <div>
+
+                  {/* Customer Name with Autocomplete */}
+                  <div className="relative">
                     <label className="block text-slate-400 font-semibold mb-1">
-                      Nama Pembeli / Owner Resto *
+                      Nama Pembeli / PIC *
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="Contoh: Bpk. Hendra (Resto Padang Sederhana)"
+                      placeholder="Ketik nama pembeli..."
                       value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
+                      onChange={(e) => handleCustomerSearch(e.target.value)}
+                      onFocus={() => {
+                        if (customerSuggestions.length > 0) setShowCustomerDropdown(true);
+                      }}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-200 focus:ring-1 focus:ring-amber-500"
                     />
+
+                    {/* Autocomplete Dropdown */}
+                    {showCustomerDropdown && customerSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-800">
+                        {customerSuggestions.map((cust) => (
+                          <button
+                            key={cust.id}
+                            type="button"
+                            onClick={() => handleSelectCustomer(cust)}
+                            className="w-full p-2.5 text-left hover:bg-slate-800 flex items-start justify-between gap-2 transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-200 text-xs truncate flex items-center gap-1.5">
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>{cust.name}</span>
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">
+                                {cust.company_name ? `${cust.company_name} • ` : ''}{cust.phone}
+                              </p>
+                            </div>
+                            <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 border border-slate-700 shrink-0">
+                              {cust.segment}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
+
                   <div>
                     <label className="block text-slate-400 font-semibold mb-1">
                       No. WhatsApp Pembeli *
@@ -1297,6 +1388,19 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-200 focus:ring-1 focus:ring-amber-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-semibold mb-1">
+                      Perusahaan / Resto / Brand
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Resto Padang Sederhana"
+                      value={customerCompany}
+                      onChange={(e) => setCustomerCompany(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-200 focus:ring-1 focus:ring-amber-500"
                     />
                   </div>
                 </div>

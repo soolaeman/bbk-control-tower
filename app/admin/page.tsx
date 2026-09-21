@@ -15,12 +15,14 @@ import { SEOQualityControl } from '@/components/admin/SEOQualityControl';
 import { SocialMediaCenter } from '@/components/admin/SocialMediaCenter';
 import { SalesHelperView } from '@/components/admin/SalesHelperView';
 import { RoleManagement } from '@/components/admin/RoleManagement';
+import { CustomersCRM } from '@/components/admin/CustomersCRM';
 import {
   LayoutDashboard,
   Boxes,
   Workflow,
   Receipt,
   FileText,
+  Users,
   TrendingUp,
   Warehouse,
   SearchCheck,
@@ -54,6 +56,7 @@ type AdminTab =
   | 'SEO'
   | 'SOCIAL'
   | 'SALES_HELPER'
+  | 'CUSTOMERS'
   | 'ROLES';
 
 export default function AdminPage() {
@@ -139,6 +142,12 @@ export default function AdminPage() {
       label: 'Sales & WA Pitch',
       icon: <MessageSquare className="w-4 h-4 text-emerald-400" />,
       allowed: role === 'ADMIN' || Boolean(permissions.canViewSalesPitch) || Boolean(permissions.canViewDealPrice),
+    },
+    {
+      id: 'CUSTOMERS',
+      label: 'Buku Pelanggan & CRM',
+      icon: <Users className="w-4 h-4 text-emerald-400" />,
+      allowed: role === 'ADMIN' || Boolean(permissions.canViewInvoices) || Boolean(permissions.canViewSalesPitch),
     },
     {
       id: 'PIPELINE',
@@ -444,6 +453,12 @@ export default function AdminPage() {
             {activeTab === 'SEO' && <SEOQualityControl />}
             {activeTab === 'SOCIAL' && <SocialMediaCenter />}
             {activeTab === 'SALES_HELPER' && <SalesHelperView />}
+            {activeTab === 'CUSTOMERS' && (
+              <CustomersCRM
+                onNavigateToInvoice={() => setActiveTab('INVOICES')}
+                onNavigateToSalesPitch={() => setActiveTab('SALES_HELPER')}
+              />
+            )}
           </div>
         </main>
       </div>

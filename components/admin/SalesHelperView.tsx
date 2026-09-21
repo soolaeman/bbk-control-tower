@@ -24,6 +24,9 @@ import {
   CheckCircle,
   Layers,
   ShoppingBag,
+  Download,
+  Smartphone,
+  Laptop,
 } from 'lucide-react';
 
 function formatTimestampWithYear(raw?: any): string {
@@ -109,6 +112,11 @@ export function SalesHelperView() {
   const [dealPriceInput, setDealPriceInput] = useState('');
   const [soldNotesInput, setSoldNotesInput] = useState('');
   const [soldSuccessMsg, setSoldSuccessMsg] = useState('');
+
+  // Media Pitcher states (Cara 1 & Cara 2)
+  const [isDownloadingPhotos, setIsDownloadingPhotos] = useState(false);
+  const [photoDownloadStatus, setPhotoDownloadStatus] = useState('');
+  const [webShareNotice, setWebShareNotice] = useState('');
 
   // Shared Audit Timestamps Tracker (Synced across Desktop <-> Mobile)
   const [auditTimestamps, setAuditTimestamps] = useState<Record<string, string>>(() => {
@@ -376,6 +384,88 @@ _Stok cepat berputar, segera amankan unit sebelum diambil resto lain!_`;
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
+  // Cara 1: Batch Download all item photos (1-8 WebP/JPG)
+  const handleBatchDownloadPhotos = async () => {
+    if (!searchedItem) return;
+    const urls = (searchedItem.PHOTO_URLS?.length ? searchedItem.PHOTO_URLS : [searchedItem.FEATURED_IMAGE]).filter(Boolean) as string[];
+    if (urls.length === 0) {
+      setPhotoDownloadStatus('Unit ini belum memiliki foto untuk diunduh.');
+      setTimeout(() => setPhotoDownloadStatus(''), 3000);
+      return;
+    }
+
+    setIsDownloadingPhotos(true);
+    setPhotoDownloadStatus(`Mengunduh 1 dari ${urls.length} foto...`);
+
+    try {
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        setPhotoDownloadStatus(`Mengunduh foto ${i + 1} dari ${urls.length}...`);
+        try {
+          const res = await fetch(url, { mode: 'cors' });
+          if (!res.ok) throw new Error('Fetch failed');
+          const blob = await res.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          const ext = url.split('.').pop()?.split(/[?#]/)[0] || 'jpg';
+          a.download = `${searchedItem.SKU}-foto-${i + 1}.${ext}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(blobUrl);
+        } catch {
+          // Fallback anchor direct download
+          const a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.download = `${searchedItem.SKU}-foto-${i + 1}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+      setPhotoDownloadStatus(`✓ ${urls.length} Foto berhasil diunduh ke folder Downloads!`);
+      setTimeout(() => setPhotoDownloadStatus(''), 4000);
+    } catch (e) {
+      console.error('Batch download error:', e);
+      setPhotoDownloadStatus('Gagal mengunduh foto secara batch.');
+      setTimeout(() => setPhotoDownloadStatus(''), 3000);
+    } finally {
+      setIsDownloadingPhotos(false);
+    }
+  };
+
+  // Cara 2: Native Web Share API (Mobile WhatsApp Direct Pitch)
+  const handleNativeWebShare = async () => {
+    if (!searchedItem) return;
+    const text = generateWhatsAppMessage();
+    const url = formatCleanProductUrl(searchedItem.PRODUCT_TITLE, searchedItem.LINK_UNIT);
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: `BBKitchen - ${searchedItem.SKU}`,
+          text,
+          url,
+        });
+        setWebShareNotice('✓ Berhasil dibagikan!');
+        setTimeout(() => setWebShareNotice(''), 3000);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.warn('Web share failed, fallback to WA link:', err);
+          const encoded = encodeURIComponent(text);
+          window.open(`https://wa.me/?text=${encoded}`, '_blank');
+        }
+      }
+    } else {
+      // Fallback if browser doesn't support Web Share API
+      const encoded = encodeURIComponent(text);
+      window.open(`https://wa.me/?text=${encoded}`, '_blank');
+    }
+  };
+
   // Guardrail check
   const isBelowFloor =
     permissions.canViewFloorPrice &&
@@ -623,7 +713,6 @@ _Stok cepat berputar, segera amankan unit sebelum diambil resto lain!_`;
                   >
                     <div className="relative aspect-square w-full rounded-lg bg-slate-900 overflow-hidden mb-1.5">
                       {item.FEATURED_IMAGE ? (
-                        /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           src={item.FEATURED_IMAGE}
                           alt={item.PRODUCT_TITLE}
@@ -729,7 +818,6 @@ _Stok cepat berputar, segera amankan unit sebelum diambil resto lain!_`;
             <div className="flex items-start gap-3">
               <div className="relative w-16 h-16 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0">
                 {searchedItem.FEATURED_IMAGE ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={searchedItem.FEATURED_IMAGE}
                     alt={searchedItem.PRODUCT_TITLE}
@@ -822,8 +910,24 @@ _Stok cepat berputar, segera amankan unit sebelum diambil resto lain!_`;
             <div className="space-y-2">
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                 <span>Foto Unit ({searchedItem.PHOTO_URLS?.length || 1} Foto)</span>
-                <span className="text-[10px] text-slate-500 font-normal">Klik foto untuk buka original</span>
+                <button
+                  type="button"
+                  onClick={handleBatchDownloadPhotos}
+                  disabled={isDownloadingPhotos}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 text-[10px] font-bold transition-all disabled:opacity-50"
+                  title="Unduh seluruh foto unit sekaligus untuk drag & drop ke WhatsApp Web"
+                >
+                  <Download className={`w-3 h-3 ${isDownloadingPhotos ? 'animate-bounce' : ''}`} />
+                  <span>{isDownloadingPhotos ? 'Mengunduh...' : 'Unduh Semua Foto'}</span>
+                </button>
               </div>
+
+              {photoDownloadStatus && (
+                <div className="p-2 rounded-lg bg-emerald-950/90 border border-emerald-700 text-emerald-200 text-[10px] font-mono flex items-center gap-1.5">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>{photoDownloadStatus}</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-2">
                 {(searchedItem.PHOTO_URLS?.length ? searchedItem.PHOTO_URLS : [searchedItem.FEATURED_IMAGE]).map((url, idx) => (
@@ -835,7 +939,6 @@ _Stok cepat berputar, segera amankan unit sebelum diambil resto lain!_`;
                     className="relative aspect-square rounded-lg bg-slate-950 border border-slate-800 overflow-hidden hover:border-amber-500 transition-colors group"
                   >
                     {url ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img
                         src={url}
                         alt={`Photo ${idx + 1}`}
@@ -939,29 +1042,80 @@ _Stok cepat berputar, segera amankan unit sebelum diambil resto lain!_`;
               </div>
             </div>
 
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-800/80">
-              <span className="text-[11px] text-slate-400 text-center sm:text-left">
-                Kirim teks beserta foto unit ke WhatsApp calon pembeli.
-              </span>
-              <a
-                href={(() => {
-                  const text = encodeURIComponent(generateWhatsAppMessage());
-                  if (buyerPhone.trim()) {
-                    let cleanPhone = buyerPhone.replace(/[^0-9]/g, '');
-                    if (cleanPhone.startsWith('0')) {
-                      cleanPhone = '62' + cleanPhone.slice(1);
-                    }
-                    return `https://wa.me/${cleanPhone}?text=${text}`;
-                  }
-                  return `https://wa.me/?text=${text}`;
-                })()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-all hover:scale-105"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{buyerPhone.trim() ? `Kirim ke ${buyerPhone}` : 'Kirim via WhatsApp (Pilih Kontak)'}</span>
-              </a>
+            {/* Media Pitcher Dual Lane (Cara 1: Desktop Drag & Drop vs Cara 2: Mobile 1-Tap Share) */}
+            <div className="pt-3 border-t border-slate-800/80 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Lane 1: Cara 1 (Desktop PC / Laptop) */}
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Laptop className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs font-bold text-slate-200">Cara 1 (Desktop / Laptop)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-tight">
+                    Salin teks pitch & unduh batch foto untuk langsung di-drag ke WhatsApp Web.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={copyToClipboard}
+                      className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
+                    >
+                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copied ? 'Tersalin' : '1. Salin Teks'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBatchDownloadPhotos}
+                      disabled={isDownloadingPhotos}
+                      className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg bg-blue-950/80 hover:bg-blue-900 border border-blue-800 text-blue-300 text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      <Download className={`w-3.5 h-3.5 ${isDownloadingPhotos ? 'animate-bounce' : ''}`} />
+                      <span>{isDownloadingPhotos ? 'Mengunduh...' : '2. Unduh Foto'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lane 2: Cara 2 (Mobile Phone / 1-Tap Share) */}
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-slate-200">Cara 2 (Mobile / 1-Tap Share)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-tight">
+                    Buka native share sheet langsung ke WhatsApp (Web Share API) atau direct chat.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleNativeWebShare}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.02]"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>{webShareNotice || '1-Tap Share WA'}</span>
+                    </button>
+                    <a
+                      href={(() => {
+                        const text = encodeURIComponent(generateWhatsAppMessage());
+                        if (buyerPhone.trim()) {
+                          let cleanPhone = buyerPhone.replace(/[^0-9]/g, '');
+                          if (cleanPhone.startsWith('0')) {
+                            cleanPhone = '62' + cleanPhone.slice(1);
+                          }
+                          return `https://wa.me/${cleanPhone}?text=${text}`;
+                        }
+                        return `https://wa.me/?text=${text}`;
+                      })()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition-colors"
+                      title={buyerPhone.trim() ? `Direct chat ke ${buyerPhone}` : 'Pilih kontak WA'}
+                    >
+                      <Send className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>wa.me</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -19,6 +19,8 @@ import {
   fetchTursoNonSkuTransactions,
 } from './turso-finance-repository';
 import { updateTursoStockStatus, fetchAllTursoMasterItems } from './turso-inventory-repository';
+import { upsertCustomer } from './turso-customers-repository';
+import { saveTursoCashflowEntry } from './turso-cashflow-repository';
 import type { WarrantyRecord, WarrantyItemRecord, DeliveryDispatchRecord } from '@/lib/types/finance';
 
 // Clean Real Invoices store for BBKitchen (in-memory cache backed by Turso SQLite SSOT)
@@ -37,12 +39,177 @@ export async function getInvoices(): Promise<Invoice[]> {
   return [...cachedInvoices];
 }
 
+export async function processInvoiceStateReactivity(inv: Invoice, targetStatus: InvoiceStatus): Promise<void> {
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  inv.status = targetStatus;
+
+  if (targetStatus === 'DP_PAID') {
+    // Gate 4: Storage Tracker (Maksimal 7 hari free storage pasca booking/DP)
+    const deadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    inv.storageDeadline = deadline.toISOString().split('T')[0];
+
+    // Hook Inventori: Otomatis kunci unit fisik menjadi BOOKED di katalog publik
+    if (inv.items && inv.items.length > 0) {
+      for (const item of inv.items) {
+        if (item.sku && !item.sku.startsWith('NON-SKU')) {
+          await updateTursoStockStatus(item.sku, 'BOOKED').catch((e) =>
+            console.warn(`Gagal update unit ${item.sku} ke BOOKED:`, e)
+          );
+        }
+      }
+    }
+  } else if (targetStatus === 'PAID') {
+    inv.paidDate = todayStr;
+
+    // Hook Inventori: Otomatis kunci unit fisik menjadi SOLD
+    if (inv.items && inv.items.length > 0) {
+      for (const item of inv.items) {
+        if (item.sku && !item.sku.startsWith('NON-SKU')) {
+          await updateTursoStockStatus(item.sku, 'SOLD', item.unitPrice).catch((e) =>
+            console.warn(`Gagal update unit ${item.sku} ke SOLD:`, e)
+          );
+        }
+      }
+    }
+
+    // DIRECTIVE PR-1: Auto-provision Delivery Dispatch to Turso DB
+    const sjNumber =
+      inv.suratJalanNumber ||
+      `SJ-BBK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${
+        inv.id.replace(/\D/g, '').slice(-4) || '1024'
+      }`;
+    inv.suratJalanNumber = sjNumber;
+
+    const dispatchRecord: DeliveryDispatchRecord = {
+      id: `disp_${inv.id}`,
+      sjNumber,
+      invoiceNumber: inv.invoiceNumber,
+      driverName: inv.deliveryDriver || 'Supir Pamulang',
+      driverPhone: inv.driverPhone || '-',
+      vehiclePlateReal: inv.deliveryVehiclePlate || '-',
+      recipientNameAllowed: inv.customerName,
+      isUnlockedForAcceptance: false,
+      dispatchedAt: now.toISOString(),
+    };
+    await saveTursoDispatch(dispatchRecord).catch((e) =>
+      console.warn('Auto-provision delivery dispatch warning:', e)
+    );
+
+    // DIRECTIVE PR-1: Auto-provision E-Warranty to Turso DB
+    const isWarrantyEligible = (desc: string) => {
+      const lower = (desc || '').toLowerCase();
+      return (
+        lower.includes('chiller') ||
+        lower.includes('freezer') ||
+        lower.includes('showcase') ||
+        lower.includes('kulkas') ||
+        lower.includes('kompor') ||
+        lower.includes('burner') ||
+        lower.includes('fryer') ||
+        lower.includes('oven') ||
+        lower.includes('steamer') ||
+        lower.includes('ice maker') ||
+        lower.includes('blender') ||
+        lower.includes('mixer') ||
+        lower.includes('slicer') ||
+        lower.includes('mesin')
+      );
+    };
+
+    const warrantyNumber = `GAR-${now.getFullYear()}-${inv.id.replace(/\D/g, '').slice(-5) || '20261'}`;
+    const expires14 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const expires21 = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
+
+    const warrantyItems: WarrantyItemRecord[] = (inv.items || []).map((it, idx) => ({
+      id: `witem_${inv.id}_${idx}_${Date.now()}`,
+      warrantyId: `war_${inv.id}`,
+      itemCode: it.sku || `BBK-${idx + 1}`,
+      itemName: it.description || 'Unit Komersial',
+      itemCondition: it.condition || 'SECOND_RECONDITIONED',
+      warrantyEligible: isWarrantyEligible(it.description),
+    }));
+
+    const warrantyRecord: WarrantyRecord = {
+      id: `war_${inv.id}`,
+      warrantyNumber,
+      invoiceNumber: inv.invoiceNumber,
+      customerName: inv.customerName,
+      customerCompany: inv.customerCompany || undefined,
+      receivedAt: now.toISOString(),
+      warrantyExpiresAt: expires14,
+      publicExpiresAt: expires21,
+      status: 'ACTIVE',
+      items: warrantyItems,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+    await saveTursoWarranty(warrantyRecord).catch((e) =>
+      console.warn('Auto-provision warranty warning:', e)
+    );
+
+    // Auto-upsert or update Customer Profile in Turso CRM
+    if (inv.customerPhone) {
+      await upsertCustomer({
+        name: inv.customerName,
+        phone: inv.customerPhone,
+        company_name: inv.customerCompany || undefined,
+        address: inv.customerAddress || undefined,
+        last_order_at: now.toISOString(),
+      }).catch((e) => console.warn('Auto-upsert customer on invoice paid warning:', e));
+    }
+  } else if (targetStatus === 'VOID') {
+    // Gate 7: Ihsan & Ta'widh (Holding fee 10% capped at Rp 1.000.000)
+    const holdingFee = Math.min(Math.round((inv.totalAmount || 0) * 0.1), 1000000);
+    const dpPaid = inv.dpAmount || 0;
+    inv.holdingFeeAmount = holdingFee;
+    inv.refundAmount = Math.max(0, dpPaid - holdingFee);
+
+    // Hook Inventori: Lepas kembali unit fisik menjadi READY di katalog publik
+    if (inv.items && inv.items.length > 0) {
+      for (const item of inv.items) {
+        if (item.sku && !item.sku.startsWith('NON-SKU')) {
+          await updateTursoStockStatus(item.sku, 'READY').catch((e) =>
+            console.warn(`Gagal lepas unit ${item.sku} ke READY:`, e)
+          );
+        }
+      }
+    }
+
+    // Persist refund outflow to cashflow_transactions if refundAmount > 0
+    if (inv.refundAmount > 0) {
+      await saveTursoCashflowEntry({
+        tanggal: todayStr,
+        jenisKas: 'PENGELUARAN',
+        kategori: 'BIAYA LAINNYA',
+        nominal: inv.refundAmount,
+        keterangan: `Refund Pembatalan DP ${inv.invoiceNumber} - ${inv.customerName} (Ta'widh Rp ${holdingFee.toLocaleString('id-ID')} ditahan)`,
+        referensiSku: inv.items?.[0]?.sku,
+        dicatatOleh: 'SISTEM_DEAL_REVERSAL',
+      }).catch((e) => console.warn('Auto-record cashflow refund warning:', e));
+    }
+  }
+
+  // Ensure Customer is registered as lead if phone is provided
+  if (inv.customerPhone && targetStatus !== 'PAID') {
+    await upsertCustomer({
+      name: inv.customerName,
+      phone: inv.customerPhone,
+      company_name: inv.customerCompany || undefined,
+      address: inv.customerAddress || undefined,
+    }).catch((e) => console.warn('Auto-upsert customer lead warning:', e));
+  }
+}
+
 export async function createInvoice(invoiceData: Omit<Invoice, 'id'>): Promise<Invoice> {
   const newInvoice: Invoice = {
     ...invoiceData,
     id: `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
   };
   cachedInvoices.unshift(newInvoice);
+
+  // Trigger two-way deal flow reactivity
+  await processInvoiceStateReactivity(newInvoice, newInvoice.status);
 
   // Persist to Turso Edge Database SSOT
   await saveTursoInvoice(newInvoice).catch((e) =>
@@ -62,6 +229,9 @@ export async function updateInvoice(invoice: Invoice): Promise<Invoice> {
     cachedInvoices.unshift(invoice);
   }
 
+  // Trigger two-way deal flow reactivity
+  await processInvoiceStateReactivity(invoice, invoice.status);
+
   // Persist full update to Turso Edge Database SSOT
   await saveTursoInvoice(invoice).catch((e) =>
     console.warn('Turso invoice update warning:', e)
@@ -72,134 +242,10 @@ export async function updateInvoice(invoice: Invoice): Promise<Invoice> {
 
 export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Promise<boolean> {
   const index = cachedInvoices.findIndex((inv) => inv.id === id || inv.invoiceNumber === id);
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
 
   if (index !== -1) {
     const inv = cachedInvoices[index];
-    inv.status = status;
-
-    if (status === 'DP_PAID') {
-      // Gate 4: Storage Tracker (Maksimal 7 hari free storage pasca booking/DP)
-      const deadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      inv.storageDeadline = deadline.toISOString().split('T')[0];
-
-      // Hook Inventori: Otomatis kunci unit fisik menjadi BOOKED
-      if (inv.items && inv.items.length > 0) {
-        for (const item of inv.items) {
-          if (item.sku && !item.sku.startsWith('NON-SKU')) {
-            await updateTursoStockStatus(item.sku, 'BOOKED').catch((e) =>
-              console.warn(`Gagal update unit ${item.sku} ke BOOKED:`, e)
-            );
-          }
-        }
-      }
-    } else if (status === 'PAID') {
-      inv.paidDate = todayStr;
-
-      // Hook Inventori: Otomatis kunci unit fisik menjadi SOLD
-      if (inv.items && inv.items.length > 0) {
-        for (const item of inv.items) {
-          if (item.sku && !item.sku.startsWith('NON-SKU')) {
-            await updateTursoStockStatus(item.sku, 'SOLD', item.unitPrice).catch((e) =>
-              console.warn(`Gagal update unit ${item.sku} ke SOLD:`, e)
-            );
-          }
-        }
-      }
-
-      // DIRECTIVE PR-1: Auto-provision Delivery Dispatch to Turso DB
-      const sjNumber =
-        inv.suratJalanNumber ||
-        `SJ-BBK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${
-          inv.id.replace(/\D/g, '').slice(-4) || '1024'
-        }`;
-      inv.suratJalanNumber = sjNumber;
-
-      const dispatchRecord: DeliveryDispatchRecord = {
-        id: `disp_${inv.id}`,
-        sjNumber,
-        invoiceNumber: inv.invoiceNumber,
-        driverName: inv.deliveryDriver || 'Supir Pamulang',
-        driverPhone: inv.driverPhone || '-',
-        vehiclePlateReal: inv.deliveryVehiclePlate || '-',
-        recipientNameAllowed: inv.customerName,
-        isUnlockedForAcceptance: false,
-        dispatchedAt: now.toISOString(),
-      };
-      await saveTursoDispatch(dispatchRecord).catch((e) =>
-        console.warn('Auto-provision delivery dispatch warning:', e)
-      );
-
-      // DIRECTIVE PR-1: Auto-provision E-Warranty to Turso DB
-      const isWarrantyEligible = (desc: string) => {
-        const lower = (desc || '').toLowerCase();
-        return (
-          lower.includes('chiller') ||
-          lower.includes('freezer') ||
-          lower.includes('showcase') ||
-          lower.includes('kulkas') ||
-          lower.includes('kompor') ||
-          lower.includes('burner') ||
-          lower.includes('fryer') ||
-          lower.includes('oven') ||
-          lower.includes('steamer') ||
-          lower.includes('ice maker') ||
-          lower.includes('blender') ||
-          lower.includes('mixer') ||
-          lower.includes('slicer') ||
-          lower.includes('mesin')
-        );
-      };
-
-      const warrantyNumber = `GAR-${now.getFullYear()}-${inv.id.replace(/\D/g, '').slice(-5) || '20261'}`;
-      const expires14 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
-      const expires21 = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
-
-      const warrantyItems: WarrantyItemRecord[] = (inv.items || []).map((it, idx) => ({
-        id: `witem_${inv.id}_${idx}_${Date.now()}`,
-        warrantyId: `war_${inv.id}`,
-        itemCode: it.sku || `BBK-${idx + 1}`,
-        itemName: it.description || 'Unit Komersial',
-        itemCondition: it.condition || 'SECOND_RECONDITIONED',
-        warrantyEligible: isWarrantyEligible(it.description),
-      }));
-
-      const warrantyRecord: WarrantyRecord = {
-        id: `war_${inv.id}`,
-        warrantyNumber,
-        invoiceNumber: inv.invoiceNumber,
-        customerName: inv.customerName,
-        customerCompany: inv.customerCompany || undefined,
-        receivedAt: now.toISOString(),
-        warrantyExpiresAt: expires14,
-        publicExpiresAt: expires21,
-        status: 'ACTIVE',
-        items: warrantyItems,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      };
-      await saveTursoWarranty(warrantyRecord).catch((e) =>
-        console.warn('Auto-provision warranty warning:', e)
-      );
-    } else if (status === 'VOID') {
-      // Gate 7: Ihsan & Ta'widh (Holding fee 10% capped at Rp 1.000.000)
-      const holdingFee = Math.min(Math.round((inv.totalAmount || 0) * 0.1), 1000000);
-      const dpPaid = inv.dpAmount || 0;
-      inv.holdingFeeAmount = holdingFee;
-      inv.refundAmount = Math.max(0, dpPaid - holdingFee);
-
-      // Hook Inventori: Lepas kembali unit fisik menjadi READY di katalog publik
-      if (inv.items && inv.items.length > 0) {
-        for (const item of inv.items) {
-          if (item.sku && !item.sku.startsWith('NON-SKU')) {
-            await updateTursoStockStatus(item.sku, 'READY').catch((e) =>
-              console.warn(`Gagal lepas unit ${item.sku} ke READY:`, e)
-            );
-          }
-        }
-      }
-    }
+    await processInvoiceStateReactivity(inv, status);
 
     // Persist full state ke Turso
     await saveTursoInvoice(inv).catch((e) =>

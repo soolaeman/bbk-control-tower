@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   QrCode,
   Lock,
+  Download,
 } from 'lucide-react';
 
 interface OfficialDocumentModalProps {
@@ -269,6 +270,20 @@ export function OfficialDocumentModal({
   // Gate 2: Eligible Items Filter using top-level isWarrantyEligible
   const eligibleItems = invoice.items.filter((it) => isWarrantyEligible(it.description));
   const nonEligibleItems = invoice.items.filter((it) => !isWarrantyEligible(it.description));
+
+  const cleanCustomerName = (invoice.customerCompany || invoice.customerName || 'Customer').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const targetPdfFilename = `${docNumber}-${cleanCustomerName}`;
+
+  const handleDownloadPdf = () => {
+    const originalTitle = document.title;
+    document.title = targetPdfFilename;
+    const restoreTitle = () => {
+      document.title = originalTitle;
+      window.removeEventListener('afterprint', restoreTitle);
+    };
+    window.addEventListener('afterprint', restoreTitle);
+    window.print();
+  };
 
   const printDocument = () => {
     window.print();
@@ -653,14 +668,27 @@ Mohon konfirmasi dan kirim bukti transfer jika dana telah terkirim. Terima kasih
             </button>
 
             {effectiveCanPrint ? (
-              <button
-                type="button"
-                onClick={printDocument}
-                className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md transition-colors"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Cetak / PDF</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.02]"
+                  title={`Unduh dokumen langsung sebagai PDF resmi (${targetPdfFilename}.pdf)`}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={printDocument}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md transition-colors"
+                  title="Cetak langsung atau pilih printer (A4)"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Cetak</span>
+                </button>
+              </>
             ) : (
               <button
                 type="button"
@@ -683,8 +711,42 @@ Mohon konfirmasi dan kirim bukti transfer jika dana telah terkirim. Terima kasih
           </div>
         </div>
 
+        {/* Global Print Styles for Perfect Unclipped A4 PDF */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            body {
+              background: white !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            body * {
+              visibility: hidden;
+            }
+            #official-document-sheet, #official-document-sheet * {
+              visibility: visible;
+            }
+            #official-document-sheet {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 6mm 8mm !important;
+              background: white !important;
+              color: #0f172a !important;
+              box-shadow: none !important;
+              border: none !important;
+              overflow: visible !important;
+            }
+            @page {
+              size: A4 portrait;
+              margin: 6mm;
+            }
+          }
+        `}} />
+
         {/* PRINTABLE A4 PAPER CONTENT */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white text-slate-900 font-sans print:p-0 print:m-0 print:overflow-visible">
+        <div id="official-document-sheet" className="flex-1 overflow-y-auto p-4 sm:p-8 bg-white text-slate-900 font-sans print:p-0 print:m-0 print:overflow-visible">
           {/* Document Header with BBKitchen Branding */}
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5 mb-6">
             <div className="space-y-1">
