@@ -125,6 +125,46 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
   const [vehiclePlate, setVehiclePlate] = useState('');
   const [notes, setNotes] = useState('');
 
+  // DIRECTIVE PR-1 (Task 2): Remote Acceptance Unlock States & Handler
+  const [unlockedSjs, setUnlockedSjs] = useState<Record<string, boolean>>({});
+  const [unlockingSj, setUnlockingSj] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/dispatches')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.dispatches && Array.isArray(data.dispatches)) {
+          const map: Record<string, boolean> = {};
+          data.dispatches.forEach((d: any) => {
+            if (d.sjNumber) {
+              map[d.sjNumber] = Boolean(d.isUnlockedForAcceptance);
+            }
+          });
+          setUnlockedSjs(map);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleUnlockAcceptance = async (sjNumber: string) => {
+    if (!sjNumber) return;
+    setUnlockingSj(sjNumber);
+    try {
+      const res = await fetch('/api/dispatches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'UNLOCK', sjNumber }),
+      });
+      if (res.ok) {
+        setUnlockedSjs((prev) => ({ ...prev, [sjNumber]: true }));
+      }
+    } catch (err) {
+      console.error('Failed to unlock dispatch acceptance:', err);
+    } finally {
+      setUnlockingSj(null);
+    }
+  };
+
   // Helper Methods for Multi-Payment Rows
   const addPaymentRow = () => {
     const nextIdx = payments.length + 1;
@@ -911,6 +951,22 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
                                 Storage: s.d {inv.storageDeadline}
                               </p>
                             )}
+                            {(() => {
+                              const sjNum = inv.suratJalanNumber || ('SJ-' + inv.invoiceNumber.replace(/^INV-/, ''));
+                              return (
+                                <div className="pt-0.5">
+                                  {unlockedSjs[sjNum] ? (
+                                    <span className="inline-block px-1.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded text-[9px] font-bold">
+                                      🔓 E-POD Terbuka
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block px-1.5 py-0.5 bg-amber-950 text-amber-300 border border-amber-800 rounded text-[9px] font-bold">
+                                      🔒 E-POD Terkunci
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         ) : invPaid > 0 ? (
                           <div className="space-y-0.5">
@@ -1018,6 +1074,32 @@ export function InvoiceManager({ subTab, onSubTabChange }: InvoiceManagerProps =
                                     <ShieldCheck className="w-3 h-3 text-teal-400" />
                                     <span>Garansi</span>
                                   </button>
+
+                                  {/* Remote Acceptance Gate (E-POD) */}
+                                  {(() => {
+                                    const sjNum = inv.suratJalanNumber || ('SJ-' + inv.invoiceNumber.replace(/^INV-/, ''));
+                                    const isUnlocked = unlockedSjs[sjNum];
+                                    return isUnlocked ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-950/80 text-emerald-300 text-xs font-bold border border-emerald-800"
+                                        title="Gate Tanda Tangan Serah Terima Digital E-POD di HP sudah Terbuka"
+                                      >
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                        <span>TTD Terbuka</span>
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUnlockAcceptance(sjNum)}
+                                        disabled={unlockingSj === sjNum}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition-all disabled:opacity-50"
+                                        title="Buka Kunci Tanda Tangan Serah Terima Digital di HP Supir/Penerima"
+                                      >
+                                        <Lock className="w-3 h-3" />
+                                        <span>{unlockingSj === sjNum ? 'Membuka...' : '🔓 Buka Kunci Terima'}</span>
+                                      </button>
+                                    );
+                                  })()}
                                 </>
                               ) : (
                                 <button

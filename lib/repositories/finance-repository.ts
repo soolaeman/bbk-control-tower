@@ -31,7 +31,7 @@ import {
   unlockTursoDispatchAcceptance,
 } from './turso-finance-repository';
 import { updateTursoStockStatus } from './turso-inventory-repository';
-import type { WarrantyRecord, DeliveryDispatchRecord } from '@/lib/types/finance';
+import type { WarrantyRecord, WarrantyItemRecord, DeliveryDispatchRecord } from '@/lib/types/finance';
 
 
 // Clean Real Invoices store for BBKitchen (in-memory cache)
@@ -140,6 +140,81 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
           }
         }
       }
+
+      // DIRECTIVE PR-1: Auto-provision Delivery Dispatch to Turso DB
+      const sjNumber =
+        inv.suratJalanNumber ||
+        `SJ-BBK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${
+          inv.id.replace(/\D/g, '').slice(-4) || '1024'
+        }`;
+      inv.suratJalanNumber = sjNumber;
+
+      const dispatchRecord: DeliveryDispatchRecord = {
+        id: `disp_${inv.id}`,
+        sjNumber,
+        invoiceNumber: inv.invoiceNumber,
+        driverName: inv.deliveryDriver || 'Supir Pamulang',
+        driverPhone: inv.driverPhone || '-',
+        vehiclePlateReal: inv.deliveryVehiclePlate || '-',
+        recipientNameAllowed: inv.customerName,
+        isUnlockedForAcceptance: false,
+        dispatchedAt: now.toISOString(),
+      };
+      await saveTursoDispatch(dispatchRecord).catch((e) =>
+        console.warn('Auto-provision delivery dispatch warning:', e)
+      );
+
+      // DIRECTIVE PR-1: Auto-provision E-Warranty to Turso DB
+      const isWarrantyEligible = (desc: string) => {
+        const lower = (desc || '').toLowerCase();
+        return (
+          lower.includes('chiller') ||
+          lower.includes('freezer') ||
+          lower.includes('showcase') ||
+          lower.includes('kulkas') ||
+          lower.includes('kompor') ||
+          lower.includes('burner') ||
+          lower.includes('fryer') ||
+          lower.includes('oven') ||
+          lower.includes('steamer') ||
+          lower.includes('ice maker') ||
+          lower.includes('blender') ||
+          lower.includes('mixer') ||
+          lower.includes('slicer') ||
+          lower.includes('mesin')
+        );
+      };
+
+      const warrantyNumber = `GAR-${now.getFullYear()}-${inv.id.replace(/\D/g, '').slice(-5) || '20261'}`;
+      const expires14 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      const expires21 = new Date(now.getTime() + 21 * 24 * 60 * 60 * 1000).toISOString();
+
+      const warrantyItems: WarrantyItemRecord[] = (inv.items || []).map((it, idx) => ({
+        id: `witem_${inv.id}_${idx}_${Date.now()}`,
+        warrantyId: `war_${inv.id}`,
+        itemCode: it.sku || `BBK-${idx + 1}`,
+        itemName: it.description || 'Unit Komersial',
+        itemCondition: it.condition || 'SECOND_RECONDITIONED',
+        warrantyEligible: isWarrantyEligible(it.description),
+      }));
+
+      const warrantyRecord: WarrantyRecord = {
+        id: `war_${inv.id}`,
+        warrantyNumber,
+        invoiceNumber: inv.invoiceNumber,
+        customerName: inv.customerName,
+        customerCompany: inv.customerCompany || undefined,
+        receivedAt: now.toISOString(),
+        warrantyExpiresAt: expires14,
+        publicExpiresAt: expires21,
+        status: 'ACTIVE',
+        items: warrantyItems,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+      await saveTursoWarranty(warrantyRecord).catch((e) =>
+        console.warn('Auto-provision warranty warning:', e)
+      );
     } else if (status === 'VOID') {
       // Gate 7: Ihsan & Ta'widh (Holding fee 10% capped at Rp 1.000.000)
       const holdingFee = Math.min(Math.round((inv.totalAmount || 0) * 0.1), 1000000);

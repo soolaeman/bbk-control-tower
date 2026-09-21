@@ -32,6 +32,26 @@ interface OfficialDocumentModalProps {
   initialType?: DocumentType;
 }
 
+export const isWarrantyEligible = (desc: string) => {
+  const lower = (desc || '').toLowerCase();
+  return (
+    lower.includes('chiller') ||
+    lower.includes('freezer') ||
+    lower.includes('showcase') ||
+    lower.includes('kulkas') ||
+    lower.includes('kompor') ||
+    lower.includes('burner') ||
+    lower.includes('fryer') ||
+    lower.includes('oven') ||
+    lower.includes('steamer') ||
+    lower.includes('ice maker') ||
+    lower.includes('blender') ||
+    lower.includes('mixer') ||
+    lower.includes('slicer') ||
+    lower.includes('mesin')
+  );
+};
+
 export function OfficialDocumentModal({
   invoice,
   isOpen,
@@ -57,6 +77,18 @@ export function OfficialDocumentModal({
 
   const [warrantyQrUrl, setWarrantyQrUrl] = useState<string>('');
   const [sjQrUrl, setSjQrUrl] = useState<string>('');
+
+  const [personaMode, setPersonaMode] = useState<'RETAIL_WARM' | 'B2B_FORMAL'>(() => {
+    return invoice.customerCompany?.toLowerCase().includes('pt') ||
+      invoice.customerCompany?.toLowerCase().includes('cv') ||
+      (invoice.totalAmount && invoice.totalAmount >= 5000000)
+      ? 'B2B_FORMAL'
+      : 'RETAIL_WARM';
+  });
+
+  const [withEmeterai, setWithEmeterai] = useState<boolean>(
+    (invoice.totalAmount && invoice.totalAmount >= 5000000) ? true : false
+  );
 
   const now = new Date();
 
@@ -94,6 +126,57 @@ export function OfficialDocumentModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    // DIRECTIVE PR-1 (Task 1): Auto-provision data Turso on document open
+    if (activeType === 'DELIVERY_NOTE' && docNumber) {
+      fetch('/api/dispatches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SAVE',
+          dispatch: {
+            id: `disp_${invoice.id}`,
+            sjNumber: docNumber,
+            invoiceNumber: invoice.invoiceNumber,
+            driverName: driverName || 'Supir Pamulang',
+            driverPhone: driverPhone || '-',
+            vehiclePlateReal: plateNumber || '-',
+            recipientNameAllowed: invoice.customerName,
+            isUnlockedForAcceptance: false,
+            dispatchedAt: now.toISOString(),
+          },
+        }),
+      }).catch((err) => console.warn('Auto-save dispatch warning:', err));
+    } else if (activeType === 'WARRANTY' && docNumber) {
+      fetch('/api/warranties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SAVE',
+          warranty: {
+            id: `war_${invoice.id}`,
+            warrantyNumber: docNumber,
+            invoiceNumber: invoice.invoiceNumber,
+            customerName: invoice.customerName,
+            customerCompany: invoice.customerCompany || undefined,
+            receivedAt: now.toISOString(),
+            warrantyExpiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            publicExpiresAt: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(),
+            status: 'ACTIVE',
+            items: invoice.items.map((it, idx) => ({
+              id: `witem_${invoice.id}_${idx}_${Date.now()}`,
+              warrantyId: `war_${invoice.id}`,
+              itemCode: it.sku || `BBK-${idx + 1}`,
+              itemName: it.description || 'Unit Komersial',
+              itemCondition: it.condition || 'SECOND_RECONDITIONED',
+              warrantyEligible: isWarrantyEligible(it.description),
+            })),
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+          },
+        }),
+      }).catch((err) => console.warn('Auto-save warranty warning:', err));
+    }
+
     if (activeType === 'WARRANTY' && docNumber) {
       QRCode.toDataURL(warrantyVerificationUrl, {
         width: 180,
@@ -117,7 +200,7 @@ export function OfficialDocumentModal({
         .then(setSjQrUrl)
         .catch((err) => console.error('Failed to generate SJ QR:', err));
     }
-  }, [isOpen, activeType, docNumber, warrantyVerificationUrl, sjTrackingUrl]);
+  }, [isOpen, activeType, docNumber, warrantyVerificationUrl, sjTrackingUrl, expedition, driverName, driverPhone, plateNumber]);
 
   if (!isOpen) return null;
 
@@ -220,6 +303,10 @@ export function OfficialDocumentModal({
 
   // Generate WA share summary
   const generateWhatsAppShare = () => {
+    const companyOrName = invoice.customerCompany || invoice.customerName;
+    const poRef = invoice.orderReference || `PO/BBK/${docNumber}`;
+    const sjRef = invoice.suratJalanNumber || docNumber;
+
     if (activeType === 'WARRANTY') {
       return `Halo Kak *${invoice.customerName}*! 🙏
 Berikut kami lampirkan dokumen *Kartu Garansi Resmi Digital (E-Warranty)* dari *Bukan Baru Kitchen (BBKitchen)*:
@@ -254,6 +341,102 @@ Dana refund telah ditransfer balik ke rekening Anda via Bank Jago Syariah. Terim
 
 Salam,
 Bukan Baru Kitchen (0851-2200-1051)`;
+    }
+
+    if (personaMode === 'B2B_FORMAL') {
+      if (activeType === 'INVOICE') {
+        const itemsB2B = invoice.items
+          .map((it, idx) => `${idx + 1}. *${it.description}* (${it.sku})\n   ${it.quantity} unit x ${formatIDR(it.unitPrice)} = *${formatIDR(it.total)}*`)
+          .join('\n');
+
+        return `Yth. Tim Procurement & Finance *${companyOrName}*,
+
+Menindaklanjuti Purchase Order *${poRef}*, berikut kami sampaikan Faktur Invoice Tagihan resmi dari *PT Bukan Baru Kitchen Indonesia* dengan Term Pembayaran *Cash Before Delivery (CBD)*:
+
+📄 *No. Invoice:* ${invoice.invoiceNumber}
+📋 *Rujukan PO:* ${poRef}
+🚚 *Rujukan Surat Jalan:* ${sjRef}
+💰 *Total Nilai Tagihan:* *${formatIDR(total)}*
+📜 *Ketentuan:* Pelunasan 100% wajib sebelum unit diberangkatkan dari gudang Pamulang.
+
+📌 *Rincian Item Unit:*
+${itemsB2B}
+
+*Rekening Resmi Pembayaran PT Bukan Baru Kitchen:*
+• Bank: *Bank Jago Syariah*
+• No. Rekening: *5079 8068 4419*
+• Atas Nama: *Ahmad Sulaeman*
+• Kantong: *Omset BBKitchen*
+
+🔗 *Tautan Pelacakan Surat Jalan (E-POD):*
+https://bukanbarukitchen.com/sj/${sjRef}
+
+Mohon konfirmasi dan lampirkan bukti transfer pelunasan agar jadwal pengantaran supir armada Pamulang dapat segera diproses ke gudang Cakung. Terima kasih atas kerja sama yang baik.
+
+Hormat kami,
+*PT Bukan Baru Kitchen Indonesia*
+Hotline Commercial: 0851 2200 1051
+Website: www.bukanbarukitchen.com`;
+      }
+
+      if (activeType === 'QUOTATION') {
+        const itemsB2B = invoice.items
+          .map((it, idx) => `${idx + 1}. *${it.description}* (${it.sku})\n   ${it.quantity} unit x ${formatIDR(it.unitPrice)} = *${formatIDR(it.total)}*`)
+          .join('\n');
+
+        return `Yth. Tim Procurement & Operasional *${companyOrName}*,
+
+Berikut kami sampaikan Surat Penawaran Resmi (*Official Quotation*) dari *PT Bukan Baru Kitchen Indonesia*:
+
+📋 *No. Penawaran:* ${docNumber}
+Tanggal: ${todayFormatted}
+⏰ *Masa Berlaku:* 1x24 Jam Kerja
+
+📌 *Rincian Unit Penawaran:*
+${itemsB2B}
+${discount > 0 ? `🏷️ *Diskon:* -${formatIDR(discount)}\n` : ''}
+💰 *Total Estimasi Penawaran:* *${formatIDR(total)}*
+
+Mohon konfirmasi penerbitan PO agar unit segera dikunci (Reserved) dari gudang Pamulang. Terima kasih.
+
+Hormat kami,
+*PT Bukan Baru Kitchen Indonesia*
+Hotline Commercial: 0851 2200 1051`;
+      }
+
+      if (activeType === 'DELIVERY_NOTE') {
+        const itemsListSJ = invoice.items
+          .map((it, idx) => `${idx + 1}. *${it.description}* (${it.sku}) • ${it.quantity} Unit`)
+          .join('\n');
+
+        return `Yth. Tim Penerima Logistik *${companyOrName}*,
+
+Bersama pesan ini kami sampaikan dokumen *Surat Jalan Serah Terima Unit Fisik* resmi dari *PT Bukan Baru Kitchen Indonesia*:
+
+🚚 *SURAT JALAN PENGIRIMAN UNIT (LUNAS)*
+No. Surat Jalan: *${docNumber}*
+Rujukan PO: *${poRef}*
+Tanggal: ${todayFormatted}
+
+📌 *Manifest Fisik Unit:*
+${itemsListSJ}
+
+📍 *Alamat Destinasi:*
+${invoice.customerAddress || 'Gudang Cakung'}
+
+${expedition ? `🚚 Ekspedisi: *${expedition}*` : ''}
+${driverName ? `👤 Driver: *${driverName}* ${driverPhone ? `(${driverPhone})` : ''}` : ''}
+${plateNumber ? `🚗 No. Polisi Real: *${plateNumber}*` : ''}
+
+🔗 *Tautan E-POD & Tanda Tangan Digital Penerima:*
+https://bukanbarukitchen.com/sj/${docNumber}
+
+Mohon memeriksa fisik barang dan membubuhkan tanda tangan serah terima digital pada tautan di atas saat armada tiba. Terima kasih.
+
+Hormat kami,
+*PT Bukan Baru Kitchen Indonesia*
+Hotline: 0851 2200 1051`;
+      }
     }
 
     if (activeType === 'DELIVERY_NOTE') {
@@ -445,6 +628,34 @@ Mohon konfirmasi dan kirim bukti transfer jika dana telah terkirim. Terima kasih
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Persona Mode Toggle (Retail vs B2B Formal) */}
+            <div className="flex items-center bg-slate-900 border border-slate-700 rounded-xl p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setPersonaMode('RETAIL_WARM')}
+                className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all ${
+                  personaMode === 'RETAIL_WARM'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Format WA Santai & Ramah (Retail)"
+              >
+                👤 Retail
+              </button>
+              <button
+                type="button"
+                onClick={() => setPersonaMode('B2B_FORMAL')}
+                className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all ${
+                  personaMode === 'B2B_FORMAL'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Format WA Formal Korporat & PO CBD (B2B)"
+              >
+                🏢 Korporat/B2B
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={copyToClipboard}
@@ -1038,20 +1249,45 @@ Mohon konfirmasi dan kirim bukti transfer jika dana telah terkirim. Terima kasih
                     <p>1. Unit komersial telah melalui uji QC teknisi 100% normal dan siap operasional.</p>
                     <p>2. Pelunasan 100% wajib sebelum unit dinaikkan / keluar dari gerbang gudang.</p>
                     <p>3. Pembayaran sah hanya melalui Bank Jago Syariah 5079 8068 4419 a.n. Ahmad Sulaeman.</p>
+                    {activeType === 'INVOICE' && (
+                      <div className="pt-2 print:hidden">
+                        <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={withEmeterai}
+                            onChange={(e) => setWithEmeterai(e.target.checked)}
+                            className="rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+                          />
+                          <span>Bubuhkan E-Meterai Peruri Resmi 10.000 (Nilai ≥ Rp 5 Juta)</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
-                  <div className="space-y-12 text-center">
+                  <div className="space-y-4 text-center">
                     <p className="font-bold text-slate-700">Hormat Kami,</p>
-                    <div className="relative">
-                      {activeType === 'INVOICE' && isFullyPaid && (
-                        <div className="absolute inset-0 -top-8 flex items-center justify-center pointer-events-none opacity-85">
-                          <span className="border-4 border-emerald-600 text-emerald-600 font-black text-lg px-3 py-1 rounded rotate-[-12deg] tracking-widest uppercase shadow-sm">
-                            ✓ LUNAS
-                          </span>
+                    <div className="flex items-center justify-center gap-3">
+                      {withEmeterai && activeType === 'INVOICE' && (
+                        <div className="w-20 h-20 border-2 border-dashed border-rose-400 bg-rose-50/70 rounded p-1 flex flex-col items-center justify-center text-center shrink-0">
+                          <span className="text-[7px] font-black uppercase text-rose-800 tracking-wider">METERAI ELEKTRONIK</span>
+                          <span className="text-[11px] font-mono font-black text-rose-950">10000</span>
+                          <span className="text-[6px] font-bold text-rose-700 uppercase">TGL {formattedIssueDate}</span>
+                          <span className="text-[6px] font-mono text-rose-500 truncate max-w-[70px]">PERURI RI RESMI</span>
+                          <span className="text-[6px] font-mono text-rose-400">SN: EMTR-{invoice.id.replace(/\D/g, '').slice(-6) || '849201'}</span>
                         </div>
                       )}
-                      <p className="font-bold text-slate-900 border-t border-slate-400 pt-1 mx-2">
-                        PT Bukan Baru Kitchen
-                      </p>
+                      <div className="relative flex-1">
+                        {activeType === 'INVOICE' && isFullyPaid && (
+                          <div className="absolute inset-0 -top-8 flex items-center justify-center pointer-events-none opacity-85">
+                            <span className="border-4 border-emerald-600 text-emerald-600 font-black text-lg px-3 py-1 rounded rotate-[-12deg] tracking-widest uppercase shadow-sm">
+                              ✓ LUNAS
+                            </span>
+                          </div>
+                        )}
+                        <div className="h-12"></div>
+                        <p className="font-bold text-slate-900 border-t border-slate-400 pt-1 mx-2">
+                          PT Bukan Baru Kitchen
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </>
