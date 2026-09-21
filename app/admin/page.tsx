@@ -68,6 +68,12 @@ export default function AdminPage() {
   const router = useRouter();
 
   useEffect(() => {
+    if (activeTab === 'ROLES' && role !== 'ADMIN') {
+      setActiveTab('OVERVIEW');
+    }
+  }, [activeTab, role]);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem('bbk_sidebar_collapsed');
       if (saved !== null) {
@@ -113,7 +119,7 @@ export default function AdminPage() {
   }[] = [
     {
       id: 'ROLES',
-      label: 'Roles',
+      label: 'Roles & Tim',
       icon: <Shield className="w-4 h-4 text-emerald-400" />,
       allowed: role === 'ADMIN',
     },
@@ -121,55 +127,55 @@ export default function AdminPage() {
       id: 'OVERVIEW',
       label: 'Executive Overview',
       icon: <TrendingUp className="w-4 h-4 text-emerald-400" />,
-      allowed: true,
+      allowed: role === 'ADMIN' || permissions.canViewFinanceReports,
     },
     {
       id: 'INVENTORY',
       label: 'Master Inventory',
       icon: <Boxes className="w-4 h-4 text-sky-400" />,
-      allowed: true,
+      allowed: role === 'ADMIN' || permissions.canEditInventory || permissions.canViewFloorPrice,
     },
     {
       id: 'SALES_HELPER',
       label: 'Sales & WA Pitch',
       icon: <MessageSquare className="w-4 h-4 text-emerald-400" />,
-      allowed: true,
+      allowed: role === 'ADMIN' || permissions.canViewDealPrice,
     },
     {
       id: 'PIPELINE',
       label: 'Pipeline & QC Funnel',
       icon: <Workflow className="w-4 h-4 text-rose-400" />,
-      allowed: permissions.canEditInventory,
+      allowed: role === 'ADMIN' || permissions.canEditInventory,
     },
     {
       id: 'INVOICES',
       label: 'Invoices & Dokumen Resmi',
       icon: <FileText className="w-4 h-4 text-amber-400" />,
-      allowed: true,
+      allowed: role === 'ADMIN' || permissions.canManageInvoices,
     },
     {
       id: 'FINANCE',
       label: 'Financials & Cashflow',
       icon: <Wallet className="w-4 h-4 text-emerald-400" />,
-      allowed: true,
+      allowed: role === 'ADMIN' || permissions.canViewFinanceReports,
     },
     {
       id: 'WAREHOUSES',
       label: 'Warehouse Intelligence',
       icon: <Warehouse className="w-4 h-4 text-orange-400" />,
-      allowed: true,
+      allowed: role === 'ADMIN' || permissions.canViewSupplierData,
     },
     {
       id: 'SEO',
       label: 'SEO Quality & Schema',
       icon: <SearchCheck className="w-4 h-4 text-purple-400" />,
-      allowed: permissions.canEditSEO,
+      allowed: role === 'ADMIN' || permissions.canEditSEO,
     },
     {
       id: 'SOCIAL',
       label: 'Social Distribution',
       icon: <Share2 className="w-4 h-4 text-pink-400" />,
-      allowed: permissions.canManageSocialMedia,
+      allowed: role === 'ADMIN' || permissions.canManageSocialMedia,
     },
   ];
 

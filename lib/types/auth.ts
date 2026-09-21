@@ -1,12 +1,36 @@
 // RBAC Roles & Authentication Domain Types for BBKitchen
 
-export type UserRole =
+export type SystemRole =
   | 'ADMIN'
   | 'OPERATOR'
   | 'MARKETING'
   | 'FINANCE'
   | 'VIEWER'
   | 'INVESTOR';
+
+export type UserRole = SystemRole | (string & {});
+
+export interface AppRoleDefinition {
+  id: string;
+  name: string;
+  description: string;
+  isSystem: boolean;
+  permissions: RolePermissions;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+}
+
+export interface AppUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+}
 
 export interface UserSession {
   id: string;
