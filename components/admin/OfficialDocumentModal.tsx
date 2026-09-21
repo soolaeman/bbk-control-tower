@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { Invoice, DocumentType } from '@/lib/types/finance';
 import { formatIDR, parseToISODate } from '@/lib/repositories/warehouse-utils';
 import {
@@ -54,9 +55,72 @@ export function OfficialDocumentModal({
   const [plateNumber, setPlateNumber] = useState(invoice.deliveryVehiclePlate || '');
   const [expedition, setExpedition] = useState(invoice.deliveryExpedition || '');
 
-  if (!isOpen) return null;
+  const [warrantyQrUrl, setWarrantyQrUrl] = useState<string>('');
+  const [sjQrUrl, setSjQrUrl] = useState<string>('');
 
   const now = new Date();
+
+  // Numbers generator
+  const docNumber = (() => {
+    switch (activeType) {
+      case 'QUOTATION':
+        return (
+          invoice.quotationNumber ||
+          `QUO-BBK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${
+            invoice.id.replace(/\D/g, '').slice(-4) || '1024'
+          }`
+        );
+      case 'DELIVERY_NOTE':
+        return (
+          invoice.suratJalanNumber ||
+          `SJ-BBK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${
+            invoice.id.replace(/\D/g, '').slice(-4) || '1024'
+          }`
+        );
+      case 'WARRANTY':
+        return `GAR-${now.getFullYear()}-${invoice.id.replace(/\D/g, '').slice(-5) || '20261'}`;
+      case 'CANCELLATION_NOTE':
+        return `CN-BBK-${now.getFullYear()}-${invoice.id.replace(/\D/g, '').slice(-4) || '0001'}`;
+      case 'INVOICE':
+      default:
+        return invoice.invoiceNumber;
+    }
+  })();
+
+  const storefrontBase = process.env.NEXT_PUBLIC_STOREFRONT_URL || 'https://bukanbarukitchen.com';
+  const warrantyVerificationUrl = `${storefrontBase}/garansi/${encodeURIComponent(docNumber)}`;
+  const sjTrackingUrl = `${storefrontBase}/sj/${encodeURIComponent(docNumber)}`;
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (activeType === 'WARRANTY' && docNumber) {
+      QRCode.toDataURL(warrantyVerificationUrl, {
+        width: 180,
+        margin: 1,
+        color: {
+          dark: '#020617',
+          light: '#ffffff',
+        },
+      })
+        .then(setWarrantyQrUrl)
+        .catch((err) => console.error('Failed to generate warranty QR:', err));
+    } else if (activeType === 'DELIVERY_NOTE' && docNumber) {
+      QRCode.toDataURL(sjTrackingUrl, {
+        width: 180,
+        margin: 1,
+        color: {
+          dark: '#020617',
+          light: '#ffffff',
+        },
+      })
+        .then(setSjQrUrl)
+        .catch((err) => console.error('Failed to generate SJ QR:', err));
+    }
+  }, [isOpen, activeType, docNumber, warrantyVerificationUrl, sjTrackingUrl]);
+
+  if (!isOpen) return null;
+
   const todayFormatted = now.toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
@@ -135,33 +199,6 @@ export function OfficialDocumentModal({
 
   const eligibleItems = invoice.items.filter((it) => isWarrantyEligible(it.description));
   const nonEligibleItems = invoice.items.filter((it) => !isWarrantyEligible(it.description));
-
-  // Numbers generator
-  const docNumber = (() => {
-    switch (activeType) {
-      case 'QUOTATION':
-        return (
-          invoice.quotationNumber ||
-          `QUO-BBK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${
-            invoice.id.replace(/\D/g, '').slice(-4) || '1024'
-          }`
-        );
-      case 'DELIVERY_NOTE':
-        return (
-          invoice.suratJalanNumber ||
-          `SJ-BBK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${
-            invoice.id.replace(/\D/g, '').slice(-4) || '1024'
-          }`
-        );
-      case 'WARRANTY':
-        return `GAR-${now.getFullYear()}-${invoice.id.replace(/\D/g, '').slice(-5) || '20261'}`;
-      case 'CANCELLATION_NOTE':
-        return `CN-BBK-${now.getFullYear()}-${invoice.id.replace(/\D/g, '').slice(-4) || '0001'}`;
-      case 'INVOICE':
-      default:
-        return invoice.invoiceNumber;
-    }
-  })();
 
   const printDocument = () => {
     window.print();
@@ -665,18 +702,33 @@ Mohon konfirmasi dan kirim bukti transfer jika dana telah terkirim. Terima kasih
                   <p className="font-bold text-slate-800">Verifikasi Garansi Publik & Layanan Perbaikan:</p>
                   <p className="text-slate-600 text-[11px] leading-relaxed">
                     Pindai kode QR atau buka tautan resmi: <br />
-                    <strong className="font-mono text-emerald-700">bukanbarukitchen.com/garansi/{docNumber}</strong>
+                    <a
+                      href={warrantyVerificationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-emerald-700 hover:underline font-bold"
+                    >
+                      {warrantyVerificationUrl.replace('https://', '')}
+                    </a>
                   </p>
                   <p className="text-[11px] text-slate-500">
                     Service Desk WhatsApp Care: <strong>0851-2200-1051</strong> (Respons 1x24 jam kerja)
                   </p>
                 </div>
                 <div className="flex flex-col items-center justify-center border-l border-slate-200 pl-4">
-                  <div className="w-20 h-20 bg-slate-900 text-white rounded-lg flex flex-col items-center justify-center p-2">
-                    <QrCode className="w-12 h-12 text-amber-400" />
-                    <span className="text-[8px] font-mono tracking-widest mt-0.5">SCAN QR</span>
+                  <div className="w-24 h-24 bg-white border border-slate-300 rounded-lg p-1 shadow-sm flex items-center justify-center">
+                    <img
+                      src={
+                        warrantyQrUrl ||
+                        `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data=${encodeURIComponent(
+                          warrantyVerificationUrl
+                        )}`
+                      }
+                      alt={`QR Code Garansi ${docNumber}`}
+                      className="w-full h-full object-contain"
+                    />
                   </div>
-                  <span className="text-[9px] font-mono text-slate-500 mt-1">{docNumber}</span>
+                  <span className="text-[9px] font-mono text-slate-700 font-bold mt-1">{docNumber}</span>
                 </div>
               </div>
             </div>
@@ -730,20 +782,37 @@ Mohon konfirmasi dan kirim bukti transfer jika dana telah terkirim. Terima kasih
             <>
               {/* DRIVER & EXPEDITION BAR (ONLY FOR DELIVERY NOTE) */}
               {activeType === 'DELIVERY_NOTE' && (
-                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3.5 mb-6 grid grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-orange-800 block">Jasa Ekspedisi:</span>
-                    <span className="font-black text-slate-900">{expedition || 'Ekspedisi Rekanan'}</span>
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-3.5 mb-6 flex items-center justify-between text-xs">
+                  <div className="grid grid-cols-3 gap-3 flex-1">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-orange-800 block">Jasa Ekspedisi:</span>
+                      <span className="font-black text-slate-900">{expedition || 'Ekspedisi Rekanan'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-orange-800 block">Nama Driver:</span>
+                      <span className="font-bold text-slate-900">
+                        {driverName || '-'} {driverPhone ? `(${driverPhone})` : ''}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-orange-800 block">No. Polisi Real:</span>
+                      <span className="font-bold font-mono text-slate-900">{plateNumber || '-'}</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-orange-800 block">Nama Driver:</span>
-                    <span className="font-bold text-slate-900">
-                      {driverName || '-'} {driverPhone ? `(${driverPhone})` : ''}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-orange-800 block">No. Polisi Real:</span>
-                    <span className="font-bold font-mono text-slate-900">{plateNumber || '-'}</span>
+                  <div className="flex flex-col items-center pl-4 border-l border-orange-200 shrink-0">
+                    <div className="w-16 h-16 bg-white border border-slate-300 rounded p-0.5 flex items-center justify-center">
+                      <img
+                        src={
+                          sjQrUrl ||
+                          `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(
+                            sjTrackingUrl
+                          )}`
+                        }
+                        alt={`QR E-POD ${docNumber}`}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <span className="text-[8px] font-mono text-slate-600 font-bold mt-0.5">SCAN E-POD</span>
                   </div>
                 </div>
               )}
