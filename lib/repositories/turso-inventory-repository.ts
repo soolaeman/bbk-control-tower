@@ -256,6 +256,21 @@ export async function queryTursoInventory(
   const pageSize = options.pageSize && options.pageSize > 0 ? Math.min(5000, options.pageSize) : 25;
   const offset = (page - 1) * pageSize;
 
+  let orderByClause = 'p.tanggal_masuk DESC, p.sku DESC';
+  if (options.sortBy === 'HARGA_MODAL') {
+    const dir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    orderByClause = `p.harga_modal ${dir}, p.sku DESC`;
+  } else if (options.sortBy === 'HARGA_BUKA_WA') {
+    const dir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    orderByClause = `p.harga_buka_wa ${dir}, p.sku DESC`;
+  } else if (options.sortBy === 'SKU') {
+    const dir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    orderByClause = `p.sku ${dir}`;
+  } else if (options.sortBy === 'TANGGAL_MASUK') {
+    const dir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    orderByClause = `p.tanggal_masuk ${dir}, p.sku DESC`;
+  }
+
   const selectSql = `
     SELECT 
       p.*,
@@ -263,7 +278,7 @@ export async function queryTursoInventory(
     FROM products p
     LEFT JOIN categories c ON p.category_slug = c.child_slug
     WHERE ${whereSql}
-    ORDER BY p.tanggal_masuk DESC, p.sku DESC
+    ORDER BY ${orderByClause}
     LIMIT ? OFFSET ?
   `;
 
@@ -451,7 +466,7 @@ export async function getTursoTelegramSoldRadarCandidates(): Promise<TursoSoldRa
       SELECT sku, title, link_telegram, lokasi_unit, harga_buka_wa, status_pipeline
       FROM products
       WHERE status_unit IN ('READY', 'AVAILABLE')
-        AND (status_pipeline LIKE 'ERROR%' OR is_dirty = 1)
+        AND status_pipeline = 'TELEGRAM_DELETED'
       ORDER BY sku DESC
       LIMIT 15
     `;
