@@ -93,10 +93,14 @@ export default auth((request) => {
       isAllowed = Boolean(permissions?.canViewPipeline || permissions?.canEditPipeline || permissions?.canEditInventory);
     } else if (pathname.startsWith("/api/sales-helper")) {
       isAllowed = Boolean(permissions?.canViewSalesPitch || permissions?.canEditSalesPitch || permissions?.canViewDealPrice || permissions?.canViewFloorPrice);
-    } else if (pathname.startsWith("/api/seo")) {
-      isAllowed = Boolean(permissions?.canViewSEO || permissions?.canEditSEO);
-    } else if (pathname.startsWith("/api/analytics")) {
-      isAllowed = Boolean(permissions?.canViewOverview || permissions?.canViewRawAnalytics || permissions?.canViewFinanceReports);
+    } else if (pathname.startsWith("/api/content")) {
+      isAllowed = Boolean(permissions?.canViewSEO || permissions?.canEditSEO || role === "ADMIN");
+    } else if (pathname.startsWith("/api/settings")) {
+      isAllowed = role === "ADMIN";
+    } else if (pathname.startsWith("/api/customers")) {
+      isAllowed = Boolean(permissions?.canViewSalesPitch || permissions?.canViewInvoices || role === "ADMIN");
+    } else if (pathname.startsWith("/api/warehouses")) {
+      isAllowed = Boolean(permissions?.canViewWarehouses || permissions?.canViewSupplierData || role === "ADMIN");
     }
 
     if (!isAllowed) {
