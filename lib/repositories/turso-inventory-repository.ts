@@ -15,19 +15,41 @@ const R2_BASE_URL = (
   'https://pub-946d1fe1a1b1461eb2cca6be4462ba11.r2.dev'
 ).replace(/\/$/, '');
 
-const TURSO_URL =
-  process.env.TURSO_DATABASE_URL && !process.env.TURSO_DATABASE_URL.includes('bbk-soolaeman.aws-ap-northeast-1.turso.io')
-    ? process.env.TURSO_DATABASE_URL
-    : 'file:data/bbk.db';
-
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || undefined;
+
+function getDatabaseUrl(): string {
+  const envUrl = process.env.TURSO_DATABASE_URL;
+  if (envUrl && !envUrl.includes('bbk-soolaeman.aws-ap-northeast-1.turso.io')) {
+    return envUrl;
+  }
+  if (typeof window !== 'undefined') {
+    return 'file:data/bbk.db';
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs');
+    const localDbPath = path.join(process.cwd(), 'data', 'bbk.db');
+    if (fs.existsSync(localDbPath)) {
+      return `file:${localDbPath.replace(/\\/g, '/')}`;
+    }
+    const holdingDbPath = path.resolve('..', 'Jarvis-OS', 'domains', 'business', 'bbkitchen', 'data', 'bbk.db');
+    if (fs.existsSync(holdingDbPath)) {
+      return `file:${holdingDbPath.replace(/\\/g, '/')}`;
+    }
+  } catch {
+    // Fallback
+  }
+  return 'file:data/bbk.db';
+}
 
 let clientInstance: ReturnType<typeof createClient> | null = null;
 
 export function getTursoClient() {
   if (!clientInstance) {
     clientInstance = createClient({
-      url: TURSO_URL,
+      url: getDatabaseUrl(),
       authToken: TURSO_AUTH_TOKEN,
     });
   }

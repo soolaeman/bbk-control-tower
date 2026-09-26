@@ -2,6 +2,10 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  serverExternalPackages: ['@libsql/client'],
+  outputFileTracingIncludes: {
+    '/**': ['./data/bbk.db'],
+  },
   typescript: {
     ignoreBuildErrors: false,
   },
