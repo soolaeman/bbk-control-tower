@@ -12,7 +12,7 @@
 | [\docs/notes/\](docs/notes/README.md) | Notula rapat operasional & supply (\n_meeting BBK-CT\). |
 | [\docs/plans/\](docs/plans/README.md) | Dokumen rencana fitur & arsitektur ERP. |
 | [\docs/progress/\](docs/progress/README.md) | Ledger sesi kerja koding (\n_start BBK-CT\). |
-| [`docs/plans/FOUNDATION-SECURITY.md`](docs/plans/FOUNDATION-SECURITY.md) | SOP keamanan & boundary proteksi data internal. |
+| [`docs/plans/FOUNDATION-SECURITY.md`](../Jarvis-OS/domains/business/bbkitchen/docs/plans/BBK_MASTER_EXECUTION_PLAN.md) | SOP keamanan & boundary proteksi data internal. |
 
 ---
 

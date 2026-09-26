@@ -10,15 +10,17 @@ import type {
 } from '@/lib/types/inventory';
 import { UserRole, RolePermissions, ROLE_PERMISSIONS } from '@/lib/types/auth';
 
-const TURSO_URL = process.env.TURSO_DATABASE_URL || 'libsql://bbk-soolaeman.aws-ap-northeast-1.turso.io';
-const TURSO_AUTH_TOKEN =
-  process.env.TURSO_AUTH_TOKEN ||
-  'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODk4MjI2ODcsImlkIjoiMDFhMGI5YmQtZTIwMS03ZjUxLWExMDQtMzk5NzlkNjAzMTNiIiwia2lkIjoickFjZFotQXpjdjkwZE5pLWd6aHF4ZWZPN1dzNTJnMjB3VmNtQld1bS1UcyIsInJpZCI6IjgwYzI0OTQ1LTRmMDctNGYwNy05YzJkLTdhYmFlZGFjMzNlYSJ9.qavUPG-VqnaFxPUHsi7OV_7uesPTMk2K3Tn35YueMnq4hR0KJDhZ-rc4zzCpatWWovjCCJQ0LTpINp_KRC2vCA';
-
 const R2_BASE_URL = (
   process.env.NEXT_PUBLIC_R2_PHOTO_BASE_URL ||
   'https://pub-946d1fe1a1b1461eb2cca6be4462ba11.r2.dev'
 ).replace(/\/$/, '');
+
+const TURSO_URL =
+  process.env.TURSO_DATABASE_URL && !process.env.TURSO_DATABASE_URL.includes('bbk-soolaeman.aws-ap-northeast-1.turso.io')
+    ? process.env.TURSO_DATABASE_URL
+    : 'file:data/bbk.db';
+
+const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || undefined;
 
 let clientInstance: ReturnType<typeof createClient> | null = null;
 
