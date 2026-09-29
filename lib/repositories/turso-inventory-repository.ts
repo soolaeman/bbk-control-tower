@@ -18,6 +18,10 @@ const R2_BASE_URL = (
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || undefined;
 
 function getDatabaseUrl(): string {
+  const envUrl = process.env.TURSO_DATABASE_URL;
+  if (envUrl && !envUrl.includes('bbk-soolaeman.aws-ap-northeast-1.turso.io')) {
+    return envUrl;
+  }
   if (typeof window !== 'undefined') {
     return 'file:data/bbk.db';
   }
@@ -26,12 +30,10 @@ function getDatabaseUrl(): string {
     const path = require('path');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('fs');
-    // 1. Primary: Single Holding Master SSOT (Local Dev)
     const holdingDbPath = path.resolve('..', 'Jarvis-OS', 'domains', 'business', 'bbkitchen', 'data', 'bbk.db');
     if (fs.existsSync(holdingDbPath)) {
       return `file:${holdingDbPath.replace(/\\/g, '/')}`;
     }
-    // 2. Bundled DB inside Repo (for Vercel Serverless Production)
     const localDbPath = path.join(process.cwd(), 'data', 'bbk.db');
     if (fs.existsSync(localDbPath)) {
       return `file:${localDbPath.replace(/\\/g, '/')}`;

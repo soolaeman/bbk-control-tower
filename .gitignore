@@ -6,9 +6,9 @@ coverage/
 .env*
 !.env.example
 
-# Ephemeral SQLite locks
-*.db-shm
-*.db-wal
-*.sqlite-shm
-*.sqlite-wal
-
+# Scratch & Ephemeral Debugging (Quarantine Zone)
+.scratch/
+scratch/
+*.tmp
+*.dump
+*.tsbuildinfo
