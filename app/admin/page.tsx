@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth/auth-context';
 import { RoleSwitcher } from '@/components/admin/RoleSwitcher';
 import { InventoryTable } from '@/components/admin/InventoryTable';
+import { CatalogQualityTriage } from '@/components/admin/CatalogQualityTriage';
 import { PipelineMonitor } from '@/components/admin/PipelineMonitor';
 import { InvoiceManager } from '@/components/admin/InvoiceManager';
 import { FinanceDashboard } from '@/components/admin/FinanceDashboard';
@@ -45,6 +46,7 @@ import {
 } from 'lucide-react';
 
 export type InvoiceSubTab = 'ALL' | 'QUOTATIONS' | 'ORDERS' | 'INVOICES' | 'DISPATCHES' | 'WARRANTIES';
+export type InventorySubTab = 'ALL_STOCK' | 'QUALITY_TRIAGE';
 
 type AdminTab =
   | 'OVERVIEW'
@@ -62,6 +64,8 @@ type AdminTab =
 export default function AdminPage() {
   const { user, role, permissions } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>('OVERVIEW');
+  const [inventorySubTab, setInventorySubTab] = useState<InventorySubTab>('ALL_STOCK');
+  const [isInventoryExpanded, setIsInventoryExpanded] = useState<boolean>(true);
   const [invoiceSubTab, setInvoiceSubTab] = useState<InvoiceSubTab>('ALL');
   const [isInvoicesExpanded, setIsInvoicesExpanded] = useState<boolean>(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -300,6 +304,7 @@ export default function AdminPage() {
                   if (!item.allowed) return null;
                   const isActive = activeTab === item.id;
                   const isInvoiceMenu = item.id === 'INVOICES';
+                  const isInventoryMenu = item.id === 'INVENTORY';
 
                   return (
                     <div key={item.id} className="space-y-1">
@@ -308,6 +313,9 @@ export default function AdminPage() {
                           setActiveTab(item.id);
                           if (isInvoiceMenu) {
                             setIsInvoicesExpanded((prev) => !prev || activeTab !== 'INVOICES');
+                          }
+                          if (isInventoryMenu) {
+                            setIsInventoryExpanded((prev) => !prev || activeTab !== 'INVENTORY');
                           }
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium transition-all rounded-lg ${
@@ -331,7 +339,46 @@ export default function AdminPage() {
                             )}
                           </span>
                         )}
+                        {isInventoryMenu && (
+                          <span className="text-slate-400 shrink-0">
+                            {isActive && isInventoryExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-amber-400" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                            )}
+                          </span>
+                        )}
                       </button>
+
+                      {/* Master Inventory Nested Sub-Menu */}
+                      {isInventoryMenu && isActive && isInventoryExpanded && (
+                        <div className="pl-4 pr-1 py-1 space-y-1 ml-3 border-l-2 border-amber-500/30 animate-in slide-in-from-top-1 duration-150">
+                          {[
+                            { id: 'ALL_STOCK', label: '📦 Semua Stok Unit' },
+                            { id: 'QUALITY_TRIAGE', label: '👁️ Quality Matrix & Mitigasi Foto' },
+                          ].map((sub) => {
+                            const isSubActive = inventorySubTab === sub.id;
+                            return (
+                              <button
+                                key={sub.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInventorySubTab(sub.id as InventorySubTab);
+                                  setActiveTab('INVENTORY');
+                                }}
+                                className={`w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] rounded-md transition-all text-left ${
+                                  isSubActive
+                                    ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                                    : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
+                                }`}
+                              >
+                                <span className="truncate">{sub.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       {/* Paper.id Accordion Nested Sub-Menu directly below Invoices & Dokumen Resmi */}
                       {isInvoiceMenu && isActive && isInvoicesExpanded && (
@@ -443,7 +490,9 @@ export default function AdminPage() {
           <div className="flex-1 p-6 sm:p-10 space-y-6 overflow-y-auto min-h-0">
             {activeTab === 'ROLES' && <RoleManagement />}
             {activeTab === 'OVERVIEW' && <FinanceDashboard />}
-            {activeTab === 'INVENTORY' && <InventoryTable />}
+            {activeTab === 'INVENTORY' && (
+              inventorySubTab === 'QUALITY_TRIAGE' ? <CatalogQualityTriage /> : <InventoryTable />
+            )}
             {activeTab === 'PIPELINE' && <PipelineMonitor />}
             {activeTab === 'INVOICES' && (
               <InvoiceManager subTab={invoiceSubTab} onSubTabChange={setInvoiceSubTab} />

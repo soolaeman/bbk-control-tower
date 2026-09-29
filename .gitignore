@@ -6,9 +6,8 @@ coverage/
 .env*
 !.env.example
 
-# Scratch & Ephemeral Debugging (Quarantine Zone)
-.scratch/
-scratch/
-*.tmp
-*.dump
-*.tsbuildinfo
+# Database SSOT Isolation (Master is in Jarvis-OS)
+data/
+*.db*
+*.sqlite*
+

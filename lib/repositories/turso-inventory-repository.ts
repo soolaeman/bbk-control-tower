@@ -30,13 +30,13 @@ function getDatabaseUrl(): string {
     const path = require('path');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('fs');
-    const localDbPath = path.join(process.cwd(), 'data', 'bbk.db');
-    if (fs.existsSync(localDbPath)) {
-      return `file:${localDbPath.replace(/\\/g, '/')}`;
-    }
     const holdingDbPath = path.resolve('..', 'Jarvis-OS', 'domains', 'business', 'bbkitchen', 'data', 'bbk.db');
     if (fs.existsSync(holdingDbPath)) {
       return `file:${holdingDbPath.replace(/\\/g, '/')}`;
+    }
+    const localDbPath = path.join(process.cwd(), 'data', 'bbk.db');
+    if (fs.existsSync(localDbPath)) {
+      return `file:${localDbPath.replace(/\\/g, '/')}`;
     }
   } catch {
     // Fallback
