@@ -18,30 +18,34 @@ const R2_BASE_URL = (
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || undefined;
 
 function getDatabaseUrl(): string {
-  const envUrl = process.env.TURSO_DATABASE_URL;
-  if (envUrl && !envUrl.includes('bbk-soolaeman.aws-ap-northeast-1.turso.io')) {
-    return envUrl;
-  }
-  if (typeof window !== 'undefined') {
-    return 'file:data/bbk.db';
-  }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require('path');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('fs');
-    const holdingDbPath = path.resolve('..', 'Jarvis-OS', 'domains', 'business', 'bbkitchen', 'data', 'bbk.db');
-    if (fs.existsSync(holdingDbPath)) {
-      return `file:${holdingDbPath.replace(/\\/g, '/')}`;
+  // On Vercel / Cloud Production, always use the remote Turso Cloud URL
+  if (process.env.VERCEL || (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN)) {
+    if (process.env.TURSO_DATABASE_URL) {
+      return process.env.TURSO_DATABASE_URL;
     }
-    const localDbPath = path.join(process.cwd(), 'data', 'bbk.db');
-    if (fs.existsSync(localDbPath)) {
-      return `file:${localDbPath.replace(/\\/g, '/')}`;
-    }
-  } catch {
-    // Fallback
   }
-  return 'file:data/bbk.db';
+
+  // On Local Machine, resolve directly to the Single Holding SQLite SSOT
+  if (typeof window === 'undefined') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const path = require('path');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require('fs');
+      const holdingDbPath = path.resolve('..', 'Jarvis-OS', 'domains', 'business', 'bbkitchen', 'data', 'bbk.db');
+      if (fs.existsSync(holdingDbPath)) {
+        return `file:${holdingDbPath.replace(/\\/g, '/')}`;
+      }
+      const localDbPath = path.join(process.cwd(), 'data', 'bbk.db');
+      if (fs.existsSync(localDbPath)) {
+        return `file:${localDbPath.replace(/\\/g, '/')}`;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  return process.env.TURSO_DATABASE_URL || 'file:data/bbk.db';
 }
 
 let clientInstance: ReturnType<typeof createClient> | null = null;
