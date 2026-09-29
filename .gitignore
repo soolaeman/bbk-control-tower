@@ -6,8 +6,9 @@ coverage/
 .env*
 !.env.example
 
-# Database SSOT Isolation (Master is in Jarvis-OS)
-data/
-*.db*
-*.sqlite*
+# Ephemeral SQLite locks
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
 
