@@ -4,7 +4,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ['@libsql/client'],
   outputFileTracingIncludes: {
-    '/**': ['./data/bbk.db'],
+    '/*': ['./data/bbk.db'],
+    '/api/*': ['./data/bbk.db'],
+    '/**/*': ['./data/bbk.db'],
   },
   typescript: {
     ignoreBuildErrors: false,

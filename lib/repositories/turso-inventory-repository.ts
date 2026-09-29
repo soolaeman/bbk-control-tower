@@ -30,12 +30,27 @@ function getDatabaseUrl(): string {
     const path = require('path');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('fs');
+
+    // 1. Holding Master SSOT (Local Dev)
     const holdingDbPath = path.resolve('..', 'Jarvis-OS', 'domains', 'business', 'bbkitchen', 'data', 'bbk.db');
     if (fs.existsSync(holdingDbPath)) {
       return `file:${holdingDbPath.replace(/\\/g, '/')}`;
     }
+
+    // 2. Bundled DB in repo (for Vercel Serverless / Lambda / Production)
     const localDbPath = path.join(process.cwd(), 'data', 'bbk.db');
     if (fs.existsSync(localDbPath)) {
+      if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.platform === 'linux') {
+        const tmpDbPath = '/tmp/bbk.db';
+        try {
+          if (!fs.existsSync(tmpDbPath) || fs.statSync(localDbPath).mtimeMs > fs.statSync(tmpDbPath).mtimeMs) {
+            fs.copyFileSync(localDbPath, tmpDbPath);
+          }
+          return `file:${tmpDbPath}`;
+        } catch {
+          // Fallback
+        }
+      }
       return `file:${localDbPath.replace(/\\/g, '/')}`;
     }
   } catch {
