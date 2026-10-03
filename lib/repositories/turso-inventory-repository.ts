@@ -295,19 +295,19 @@ export async function queryTursoInventory(
   const pageSize = options.pageSize && options.pageSize > 0 ? Math.min(5000, options.pageSize) : 25;
   const offset = (page - 1) * pageSize;
 
-  let orderByClause = 'p.tanggal_masuk DESC, p.sku DESC';
+  let orderByClause = 'CAST(SUBSTR(p.sku, 4) AS INTEGER) DESC';
   if (options.sortBy === 'HARGA_MODAL') {
     const dir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    orderByClause = `p.harga_modal ${dir}, p.sku DESC`;
+    orderByClause = `p.harga_modal ${dir}, CAST(SUBSTR(p.sku, 4) AS INTEGER) DESC`;
   } else if (options.sortBy === 'HARGA_BUKA_WA') {
     const dir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    orderByClause = `p.harga_buka_wa ${dir}, p.sku DESC`;
+    orderByClause = `p.harga_buka_wa ${dir}, CAST(SUBSTR(p.sku, 4) AS INTEGER) DESC`;
   } else if (options.sortBy === 'SKU') {
     const dir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    orderByClause = `p.sku ${dir}`;
+    orderByClause = `CAST(SUBSTR(p.sku, 4) AS INTEGER) ${dir}`;
   } else if (options.sortBy === 'TANGGAL_MASUK') {
     const dir = options.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    orderByClause = `p.tanggal_masuk ${dir}, p.sku DESC`;
+    orderByClause = `p.tanggal_masuk ${dir}, CAST(SUBSTR(p.sku, 4) AS INTEGER) DESC`;
   }
 
   const selectSql = `
@@ -576,7 +576,7 @@ export async function fetchAllTursoMasterItems(role?: UserRole): Promise<MasterI
       SELECT p.*, c.parent_name, c.child_name
       FROM products p
       LEFT JOIN categories c ON p.category_slug = c.child_slug
-      ORDER BY p.tanggal_masuk DESC, p.sku DESC
+      ORDER BY CASE WHEN p.status_unit = 'SOLD' THEN 1 ELSE 0 END ASC, CAST(SUBSTR(p.sku, 4) AS INTEGER) DESC
     `);
     return res.rows.map((row) =>
       maskItemForRole(mapRowToMasterItem(row as unknown as Record<string, any>), role)
