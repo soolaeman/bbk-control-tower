@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTursoClient } from '@/lib/repositories/turso-inventory-repository';
+import { getSqliteClient } from '@/lib/repositories/sqlite-inventory-repository';
 import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const pageSize = Number(searchParams.get('pageSize')) || 50;
     const offset = (page - 1) * pageSize;
 
-    const client = getTursoClient();
+    const client = getSqliteClient();
 
     // Query statistics
     const statsRes = await client.execute(`
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action, sku, updates, skus } = body;
 
-    const client = getTursoClient();
+    const client = getSqliteClient();
 
     if (action === 'UPDATE_SINGLE' && sku) {
       const { title, category_slug, kondisi_unit, status_unit, status_pipeline, harga_buka_wa, harga_display_low, harga_display_high } = updates;

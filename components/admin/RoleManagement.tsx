@@ -65,7 +65,7 @@ export function RoleManagement() {
     try {
       setLoading(true);
       const res = await fetch('/api/roles');
-      if (!res.ok) throw new Error('Gagal memuat data dari Turso DB');
+      if (!res.ok) throw new Error('Gagal memuat data dari SQLite SSOT');
       const data = await res.json();
       setRoles(data.roles || []);
       setUsers(data.users || []);
@@ -331,7 +331,7 @@ export function RoleManagement() {
     });
   };
 
-  // Save Permissions Matrix to Turso DB with legacy sync bridge
+  // Save Permissions Matrix to SQLite SSOT with legacy sync bridge
   const handleSaveMatrix = async () => {
     try {
       setSavingMatrix(true);
@@ -365,7 +365,7 @@ export function RoleManagement() {
 
       setFeedback({
         type: 'success',
-        message: 'Matriks hak akses modular berhasil disimpan ke Turso Cloud DB SSOT!',
+        message: 'Matriks hak akses modular berhasil disimpan ke Sovereign SQLite SSOT!',
       });
       notifyChange();
     } catch (err: any) {
@@ -380,7 +380,7 @@ export function RoleManagement() {
       <div className="flex h-64 items-center justify-center rounded-2xl border border-white/[0.08] bg-[#141417]">
         <div className="flex items-center gap-3 text-sm text-slate-400 font-mono">
           <RefreshCw className="h-5 w-5 animate-spin text-emerald-400" />
-          <span>Sinkronisasi Data Roles & Pengguna Turso SSOT...</span>
+          <span>Sinkronisasi Data Roles & Pengguna SQLite SSOT...</span>
         </div>
       </div>
     );
@@ -399,12 +399,12 @@ export function RoleManagement() {
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold tracking-tight text-white">Roles & Manajemen Tim</h2>
                 <span className="rounded-md bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300">
-                  TURSO SSOT
+                  SQLITE SSOT
                 </span>
               </div>
               <p className="mt-1 text-xs leading-relaxed text-slate-400 max-w-2xl">
                 Owner-only control panel. Daftarkan email Google anggota tim, buat role custom baru, dan kelola izin
-                modul operasional secara real-time langsung tersimpan ke Cloud Database.
+                modul operasional secara real-time langsung tersimpan ke Sovereign Database.
               </p>
             </div>
           </div>
@@ -694,7 +694,7 @@ export function RoleManagement() {
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-white">Matriks Hak Akses Modul Operasional</h3>
               <p className="text-[11px] text-slate-400">
-                Atur akses Lihat (View) dan Edit per role. Tersimpan permanen di Turso DB.
+                Atur akses Lihat (View) dan Edit per role. Tersimpan permanen di SQLite SSOT.
               </p>
             </div>
           </div>
@@ -707,7 +707,7 @@ export function RoleManagement() {
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-emerald-950/60 hover:bg-emerald-500 disabled:opacity-50 transition-all"
             >
               <Save className="h-3.5 w-3.5" />
-              <span>{savingMatrix ? 'Menyimpan ke Turso...' : 'Simpan Perubahan Matriks'}</span>
+              <span>{savingMatrix ? 'Menyimpan ke SQLite...' : 'Simpan Perubahan Matriks'}</span>
             </button>
           </div>
         </div>
@@ -820,7 +820,7 @@ export function RoleManagement() {
           </div>
         </div>
         <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">
-          * Catatan: Mengaktifkan Edit otomatis mengaktifkan Lihat. Mematikan Lihat otomatis mematikan Edit. Perubahan disimpan langsung ke Turso Cloud DB SSOT.
+          * Catatan: Mengaktifkan Edit otomatis mengaktifkan Lihat. Mematikan Lihat otomatis mematikan Edit. Perubahan disimpan langsung ke Sovereign SQLite SSOT.
         </p>
       </section>
 

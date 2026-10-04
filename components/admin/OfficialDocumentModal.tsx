@@ -133,7 +133,7 @@ export function OfficialDocumentModal({
     if (!isOpen) return;
 
     const currentIso = new Date().toISOString();
-    // DIRECTIVE PR-1 (Task 1): Auto-provision data Turso on document open
+    // DIRECTIVE PR-1 (Task 1): Auto-provision data SQLite SSOT on document open
     if (activeType === 'DELIVERY_NOTE' && docNumber) {
       fetch('/api/dispatches', {
         method: 'POST',

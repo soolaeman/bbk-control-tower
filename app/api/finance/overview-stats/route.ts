@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTursoClient } from '@/lib/repositories/turso-inventory-repository';
+import { getSqliteClient } from '@/lib/repositories/sqlite-inventory-repository';
 import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate') || '';
     const endDate = searchParams.get('endDate') || '';
 
-    const client = getTursoClient();
+    const client = getSqliteClient();
 
     // 1. Build WHERE conditions for products
     const productConditions: string[] = ["(status_pipeline != 'ARCHIVED' OR status_pipeline IS NULL)"];

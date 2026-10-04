@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import {
-  fetchTursoRoles,
-  fetchTursoUsers,
+  fetchRoles,
+  fetchUsers,
   createCustomRole,
   updateRole,
   deleteCustomRole,
@@ -10,7 +10,7 @@ import {
   updateUserRole,
   toggleUserStatus,
   deleteAppUser,
-} from '@/lib/repositories/turso-roles-repository';
+} from '@/lib/repositories/sqlite-roles-repository';
 import type { RolePermissions } from '@/lib/types/auth';
 
 export async function GET(request: NextRequest) {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const isDev = process.env.NODE_ENV === 'development';
 
     // Allow authenticated users to fetch roles/permissions matrix
-    const [roles, users] = await Promise.all([fetchTursoRoles(), fetchTursoUsers()]);
+    const [roles, users] = await Promise.all([fetchRoles(), fetchUsers()]);
 
     const permissionsMatrix: Record<string, RolePermissions> = {};
     for (const r of roles) {

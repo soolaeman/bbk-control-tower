@@ -12,10 +12,10 @@ import {
 } from '@/lib/repositories/sold-reports-repository';
 
 import {
-  getTursoTelegramSoldRadarCandidates,
+  getTelegramSoldRadarCandidates,
   dismissSoldRadarCandidate,
-  getTursoClient,
-} from '@/lib/repositories/turso-inventory-repository';
+  getSqliteClient,
+} from '@/lib/repositories/sqlite-inventory-repository';
 
 export type { SoldNotice };
 
@@ -23,7 +23,7 @@ export async function GET() {
   const [state, sheetReports, radarCandidates] = await Promise.all([
     getPersistentAuditState(),
     getPendingSoldReports().catch(() => []),
-    getTursoTelegramSoldRadarCandidates().catch(() => []),
+    getTelegramSoldRadarCandidates().catch(() => []),
   ]);
 
   // Convert sheet reports directly from LAPORAN_TERJUAL sheet
@@ -119,12 +119,12 @@ export async function POST(req: NextRequest) {
     }
     if (sku && timestamp) {
       newTimestamps[sku] = timestamp;
-      // Persist directly to Turso SQLite SSOT products.last_checked_telegram
-      const client = getTursoClient();
+      // Persist directly to SQLite SSOT products.last_checked_telegram
+      const client = getSqliteClient();
       client.execute({
         sql: "UPDATE products SET last_checked_telegram = ? WHERE UPPER(sku) = ?",
         args: [timestamp, sku.toUpperCase()],
-      }).catch((err) => console.warn(`Could not update Turso last_checked_telegram for SKU ${sku}:`, err));
+      }).catch((err) => console.warn(`Could not update SQLite last_checked_telegram for SKU ${sku}:`, err));
     }
 
     const savedState = await savePersistentAuditState({

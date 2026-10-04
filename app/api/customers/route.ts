@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryCustomers, upsertCustomer, deleteCustomer } from '@/lib/repositories/turso-customers-repository';
+import { queryCustomers, upsertCustomer, deleteCustomer } from '@/lib/repositories/sqlite-customers-repository';
 import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {

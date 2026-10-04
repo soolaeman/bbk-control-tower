@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queryInventory, markUnitAsSold } from '@/lib/repositories/inventory-repository';
+import { markUnitAsSold } from '@/lib/repositories/inventory-repository';
 import { UserRole } from '@/lib/types/auth';
-import { queryTursoInventory, updateTursoStockStatus } from '@/lib/repositories/turso-inventory-repository';
+import { queryInventory as querySqliteInventory, updateStockStatus } from '@/lib/repositories/sqlite-inventory-repository';
 import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {
@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
     const roleHeader = session.user.role as UserRole;
     const permissions = (session.user as any).permissions;
 
-    // Direct Query to Turso SQLite SSOT
-    const result = await queryTursoInventory(
+    // Direct Query to Sovereign SQLite SSOT
+    const result = await querySqliteInventory(
       {
         search,
         category,
@@ -91,31 +91,31 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'MARK_AS_SOLD' || status === 'SOLD' || action === 'UPDATE_STOCK_STATUS') {
-      const tursoResult = await updateTursoStockStatus(
+      const updateResult = await updateStockStatus(
         sku,
         (status as any) || 'SOLD',
         dealPrice ? Number(dealPrice) : undefined,
         notes
       );
-      if (!tursoResult.success) {
-        return NextResponse.json({ error: tursoResult.error }, { status: 404 });
+      if (!updateResult.success) {
+        return NextResponse.json({ error: updateResult.error }, { status: 404 });
       }
       return NextResponse.json({
         success: true,
-        item: tursoResult.item,
-        message: `Unit ${sku} successfully updated to ${(status as any) || 'SOLD'} in Turso SQLite SSOT`,
+        item: updateResult.item,
+        message: `Unit ${sku} successfully updated to ${(status as any) || 'SOLD'} in Sovereign SQLite SSOT`,
       });
     }
 
     if (action === 'MARK_AS_READY' || status === 'READY') {
-      const tursoResult = await updateTursoStockStatus(sku, 'READY', undefined, notes);
-      if (!tursoResult.success) {
-        return NextResponse.json({ error: tursoResult.error }, { status: 404 });
+      const updateResult = await updateStockStatus(sku, 'READY', undefined, notes);
+      if (!updateResult.success) {
+        return NextResponse.json({ error: updateResult.error }, { status: 404 });
       }
       return NextResponse.json({
         success: true,
-        item: tursoResult.item,
-        message: `Unit ${sku} successfully set to READY in Turso SQLite SSOT`,
+        item: updateResult.item,
+        message: `Unit ${sku} successfully set to READY in Sovereign SQLite SSOT`,
       });
     }
 

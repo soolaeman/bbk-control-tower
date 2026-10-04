@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTursoClient } from '@/lib/repositories/turso-inventory-repository';
+import { getSqliteClient } from '@/lib/repositories/sqlite-inventory-repository';
 
 export async function GET(
   request: NextRequest,
@@ -9,7 +9,7 @@ export async function GET(
     const { invoiceNumber } = await params;
     const cleanNumber = decodeURIComponent(invoiceNumber).trim().toUpperCase();
 
-    const client = getTursoClient();
+    const client = getSqliteClient();
 
     // 1. Fetch invoice
     const invRes = await client.execute({
@@ -129,7 +129,7 @@ export async function POST(
       return NextResponse.json({ error: 'Tanda tangan digital wajib dibubuhkan' }, { status: 400 });
     }
 
-    const client = getTursoClient();
+    const client = getSqliteClient();
     const now = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 

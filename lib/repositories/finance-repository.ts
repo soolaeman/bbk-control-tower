@@ -2,39 +2,39 @@ import { Invoice, InvoiceItem, FinancialKPIs, ClosingDealItem, InvoiceStatus, No
 import { resolveLocationFromCode, resolveHubCode, parseToISODate } from './warehouse-utils';
 
 import {
-  fetchTursoInvoices,
-  saveTursoInvoice,
-  updateTursoInvoiceStatus as updateTursoStatus,
-  deleteTursoInvoice as deleteTursoInv,
-  fetchTursoWarranties,
-  getTursoWarrantyByNumber,
-  getTursoWarrantyByInvoice,
-  saveTursoWarranty,
-  fetchTursoDispatches,
-  getTursoDispatchBySjNumber,
-  getTursoDispatchByInvoice,
-  saveTursoDispatch,
-  unlockTursoDispatchAcceptance,
-  saveTursoNonSkuTransaction,
-  fetchTursoNonSkuTransactions,
-} from './turso-finance-repository';
-import { updateTursoStockStatus, fetchAllTursoMasterItems } from './turso-inventory-repository';
-import { upsertCustomer } from './turso-customers-repository';
-import { saveTursoCashflowEntry } from './turso-cashflow-repository';
+  fetchInvoices as fetchSqliteInvoices,
+  saveInvoice as saveSqliteInvoice,
+  updateInvoiceStatus as updateSqliteStatus,
+  deleteInvoice as deleteSqliteInv,
+  fetchWarranties as fetchSqliteWarranties,
+  getWarrantyByNumber as getSqliteWarrantyByNumber,
+  getWarrantyByInvoice as getSqliteWarrantyByInvoice,
+  saveWarranty as saveSqliteWarranty,
+  fetchDispatches as fetchSqliteDispatches,
+  getDispatchBySjNumber as getSqliteDispatchBySjNumber,
+  getDispatchByInvoice as getSqliteDispatchByInvoice,
+  saveDispatch as saveSqliteDispatch,
+  unlockDispatchAcceptance as unlockSqliteDispatchAcceptance,
+  saveNonSkuTransaction as saveSqliteNonSkuTransaction,
+  fetchNonSkuTransactions as fetchSqliteNonSkuTransactions,
+} from './sqlite-finance-repository';
+import { updateStockStatus, fetchAllMasterItems } from './sqlite-inventory-repository';
+import { upsertCustomer } from './sqlite-customers-repository';
+import { saveCashflowEntry } from './sqlite-cashflow-repository';
 import type { WarrantyRecord, WarrantyItemRecord, DeliveryDispatchRecord } from '@/lib/types/finance';
 
-// Clean Real Invoices store for BBKitchen (in-memory cache backed by Turso SQLite SSOT)
+// Clean Real Invoices store for BBKitchen (in-memory cache backed by Sovereign SQLite SSOT)
 let cachedInvoices: Invoice[] = [];
 
 export async function getInvoices(): Promise<Invoice[]> {
   try {
-    const tursoInvoices = await fetchTursoInvoices();
-    if (tursoInvoices && tursoInvoices.length > 0) {
-      cachedInvoices = tursoInvoices;
+    const invoices = await fetchSqliteInvoices();
+    if (invoices && invoices.length > 0) {
+      cachedInvoices = invoices;
       return cachedInvoices;
     }
   } catch (err) {
-    console.warn('Turso invoices fetch warning:', err);
+    console.warn('SQLite invoices fetch warning:', err);
   }
   return [...cachedInvoices];
 }
@@ -53,7 +53,7 @@ export async function processInvoiceStateReactivity(inv: Invoice, targetStatus: 
     if (inv.items && inv.items.length > 0) {
       for (const item of inv.items) {
         if (item.sku && !item.sku.startsWith('NON-SKU')) {
-          await updateTursoStockStatus(item.sku, 'BOOKED').catch((e) =>
+          await updateStockStatus(item.sku, 'BOOKED').catch((e) =>
             console.warn(`Gagal update unit ${item.sku} ke BOOKED:`, e)
           );
         }
@@ -66,14 +66,14 @@ export async function processInvoiceStateReactivity(inv: Invoice, targetStatus: 
     if (inv.items && inv.items.length > 0) {
       for (const item of inv.items) {
         if (item.sku && !item.sku.startsWith('NON-SKU')) {
-          await updateTursoStockStatus(item.sku, 'SOLD', item.unitPrice).catch((e) =>
+          await updateStockStatus(item.sku, 'SOLD', item.unitPrice).catch((e) =>
             console.warn(`Gagal update unit ${item.sku} ke SOLD:`, e)
           );
         }
       }
     }
 
-    // DIRECTIVE PR-1: Auto-provision Delivery Dispatch to Turso DB
+    // DIRECTIVE PR-1: Auto-provision Delivery Dispatch to SQLite DB
     const sjNumber =
       inv.suratJalanNumber ||
       `SJ-BBK-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${
@@ -92,11 +92,11 @@ export async function processInvoiceStateReactivity(inv: Invoice, targetStatus: 
       isUnlockedForAcceptance: false,
       dispatchedAt: now.toISOString(),
     };
-    await saveTursoDispatch(dispatchRecord).catch((e) =>
+    await saveSqliteDispatch(dispatchRecord).catch((e) =>
       console.warn('Auto-provision delivery dispatch warning:', e)
     );
 
-    // DIRECTIVE PR-1: Auto-provision E-Warranty to Turso DB
+    // DIRECTIVE PR-1: Auto-provision E-Warranty to SQLite DB
     const isWarrantyEligible = (desc: string) => {
       const lower = (desc || '').toLowerCase();
       return (
@@ -144,11 +144,11 @@ export async function processInvoiceStateReactivity(inv: Invoice, targetStatus: 
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
-    await saveTursoWarranty(warrantyRecord).catch((e) =>
+    await saveSqliteWarranty(warrantyRecord).catch((e) =>
       console.warn('Auto-provision warranty warning:', e)
     );
 
-    // Auto-upsert or update Customer Profile in Turso CRM
+    // Auto-upsert or update Customer Profile in CRM
     if (inv.customerPhone) {
       await upsertCustomer({
         name: inv.customerName,
@@ -169,7 +169,7 @@ export async function processInvoiceStateReactivity(inv: Invoice, targetStatus: 
     if (inv.items && inv.items.length > 0) {
       for (const item of inv.items) {
         if (item.sku && !item.sku.startsWith('NON-SKU')) {
-          await updateTursoStockStatus(item.sku, 'READY').catch((e) =>
+          await updateStockStatus(item.sku, 'READY').catch((e) =>
             console.warn(`Gagal lepas unit ${item.sku} ke READY:`, e)
           );
         }
@@ -178,7 +178,7 @@ export async function processInvoiceStateReactivity(inv: Invoice, targetStatus: 
 
     // Persist refund outflow to cashflow_transactions if refundAmount > 0
     if (inv.refundAmount > 0) {
-      await saveTursoCashflowEntry({
+      await saveCashflowEntry({
         tanggal: todayStr,
         jenisKas: 'PENGELUARAN',
         kategori: 'BIAYA LAINNYA',
@@ -211,9 +211,9 @@ export async function createInvoice(invoiceData: Omit<Invoice, 'id'>): Promise<I
   // Trigger two-way deal flow reactivity
   await processInvoiceStateReactivity(newInvoice, newInvoice.status);
 
-  // Persist to Turso Edge Database SSOT
-  await saveTursoInvoice(newInvoice).catch((e) =>
-    console.warn('Turso invoice save warning:', e)
+  // Persist to Sovereign SQLite Database SSOT
+  await saveSqliteInvoice(newInvoice).catch((e) =>
+    console.warn('SQLite invoice save warning:', e)
   );
 
   return newInvoice;
@@ -232,9 +232,9 @@ export async function updateInvoice(invoice: Invoice): Promise<Invoice> {
   // Trigger two-way deal flow reactivity
   await processInvoiceStateReactivity(invoice, invoice.status);
 
-  // Persist full update to Turso Edge Database SSOT
-  await saveTursoInvoice(invoice).catch((e) =>
-    console.warn('Turso invoice update warning:', e)
+  // Persist full update to Sovereign SQLite Database SSOT
+  await saveSqliteInvoice(invoice).catch((e) =>
+    console.warn('SQLite invoice update warning:', e)
   );
 
   return invoice;
@@ -247,15 +247,15 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
     const inv = cachedInvoices[index];
     await processInvoiceStateReactivity(inv, status);
 
-    // Persist full state ke Turso
-    await saveTursoInvoice(inv).catch((e) =>
-      console.warn('Turso full invoice status sync warning:', e)
+    // Persist full state ke SQLite
+    await saveSqliteInvoice(inv).catch((e) =>
+      console.warn('SQLite full invoice status sync warning:', e)
     );
   }
 
-  // Persist status update to Turso Edge Database
-  await updateTursoStatus(id, status).catch((e: any) =>
-    console.warn('Turso invoice status update warning:', e)
+  // Persist status update to Sovereign SQLite Database
+  await updateSqliteStatus(id, status).catch((e: any) =>
+    console.warn('SQLite invoice status update warning:', e)
   );
 
   return true;
@@ -266,39 +266,39 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
 // ==========================================
 
 export async function getWarranties(): Promise<WarrantyRecord[]> {
-  return fetchTursoWarranties();
+  return fetchSqliteWarranties();
 }
 
 export async function getWarrantyByNumber(warrantyNumber: string): Promise<WarrantyRecord | null> {
-  return getTursoWarrantyByNumber(warrantyNumber);
+  return getSqliteWarrantyByNumber(warrantyNumber);
 }
 
 export async function getWarrantyByInvoice(invoiceNumber: string): Promise<WarrantyRecord | null> {
-  return getTursoWarrantyByInvoice(invoiceNumber);
+  return getSqliteWarrantyByInvoice(invoiceNumber);
 }
 
 export async function saveWarranty(warranty: WarrantyRecord): Promise<void> {
-  return saveTursoWarranty(warranty);
+  return saveSqliteWarranty(warranty);
 }
 
 export async function getDispatches(): Promise<DeliveryDispatchRecord[]> {
-  return fetchTursoDispatches();
+  return fetchSqliteDispatches();
 }
 
 export async function getDispatchBySjNumber(sjNumber: string): Promise<DeliveryDispatchRecord | null> {
-  return getTursoDispatchBySjNumber(sjNumber);
+  return getSqliteDispatchBySjNumber(sjNumber);
 }
 
 export async function getDispatchByInvoice(invoiceNumber: string): Promise<DeliveryDispatchRecord | null> {
-  return getTursoDispatchByInvoice(invoiceNumber);
+  return getSqliteDispatchByInvoice(invoiceNumber);
 }
 
 export async function saveDispatch(dispatch: DeliveryDispatchRecord): Promise<void> {
-  return saveTursoDispatch(dispatch);
+  return saveSqliteDispatch(dispatch);
 }
 
 export async function unlockDispatchAcceptance(sjNumber: string): Promise<boolean> {
-  return unlockTursoDispatchAcceptance(sjNumber);
+  return unlockSqliteDispatchAcceptance(sjNumber);
 }
 
 export async function deleteInvoice(idOrNumber: string): Promise<boolean> {
@@ -306,9 +306,9 @@ export async function deleteInvoice(idOrNumber: string): Promise<boolean> {
     (inv) => inv.id !== idOrNumber && inv.invoiceNumber !== idOrNumber
   );
 
-  // Persist deletion to Turso Edge Database SSOT
-  await deleteTursoInv(idOrNumber).catch((e) =>
-    console.warn('Turso invoice deletion warning:', e)
+  // Persist deletion to Sovereign SQLite Database SSOT
+  await deleteSqliteInv(idOrNumber).catch((e) =>
+    console.warn('SQLite invoice deletion warning:', e)
   );
 
   return true;
@@ -354,9 +354,9 @@ export async function getLiveClosingDealLedger(): Promise<{
   };
 }> {
   try {
-    const rawItems = await fetchAllTursoMasterItems();
+    const rawItems = await fetchAllMasterItems();
     const soldItems = rawItems.filter((i) => i.STATUS_UNIT === 'SOLD');
-    // 1. Fetch Turso SQLite Inventory and Paid Invoices
+    // 1. Fetch Sovereign SQLite Inventory and Paid Invoices
     const matchedSkusSet = new Set<string>();
     const bbkInvoiceDeals: ClosingDealItem[] = [];
     let totalPhysicalUnitsSold = 0;
@@ -364,7 +364,7 @@ export async function getLiveClosingDealLedger(): Promise<{
     try {
       const realInvoices = await getInvoices();
       const paidInvoices = (realInvoices || []).filter((inv) => inv.status === 'PAID');
-      const nonSkuRecords = await fetchTursoNonSkuTransactions().catch(() => []);
+      const nonSkuRecords = await fetchSqliteNonSkuTransactions().catch(() => []);
 
       for (const inv of paidInvoices) {
         if (!inv.items || inv.items.length === 0) continue;
@@ -704,8 +704,8 @@ export async function resolveNonSkuItem(params: {
     targetItem.sku = params.targetSku.toUpperCase();
     await updateInvoice(targetInv);
 
-    // 2. Mark the target SKU as SOLD in Turso Master Inventory
-    await updateTursoStockStatus(
+    // 2. Mark the target SKU as SOLD in Sovereign SQLite Master Inventory
+    await updateStockStatus(
       params.targetSku,
       'SOLD',
       targetItem.unitPrice,
@@ -730,7 +730,7 @@ export async function resolveNonSkuItem(params: {
     }
     await updateInvoice(targetInv);
 
-    // Save to Turso non_sku_transactions table (SSOT)
+    // Save to Sovereign SQLite non_sku_transactions table (SSOT)
     const tx: NonSkuTransaction = {
       id: `nonsku_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       invoiceNumber: targetInv.invoiceNumber,
@@ -752,7 +752,7 @@ export async function resolveNonSkuItem(params: {
       resolvedBy: 'ADMIN',
     };
 
-    await saveTursoNonSkuTransaction(tx);
+    await saveSqliteNonSkuTransaction(tx);
     return true;
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTursoClient } from '@/lib/repositories/turso-inventory-repository';
+import { getSqliteClient } from '@/lib/repositories/sqlite-inventory-repository';
 import { auth } from '@/auth';
 import { WAREHOUSE_14_HUBS, formatCleanProductUrl } from '@/lib/repositories/warehouse-utils';
 import { WarehouseCode } from '@/lib/types/inventory';
@@ -11,9 +11,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'UNAUTHENTICATED' }, { status: 401 });
     }
 
-    const client = getTursoClient();
+    const client = getSqliteClient();
 
-    // 1. Hub breakdown aggregation query directly on Turso SQLite
+    // 1. Hub breakdown aggregation query directly on Sovereign SQLite
     const hubSql = `
       SELECT 
         COALESCE(UPPER(asal_gudang), 'GK') as hubCode,
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
       deadStockItems,
     });
   } catch (error: any) {
-    console.error('Error fetching warehouse stats from Turso:', error);
+    console.error('Error fetching warehouse stats from SQLite:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch warehouse statistics' },
       { status: 500 }

@@ -9,7 +9,7 @@ import {
 } from '@/lib/types/inventory';
 import { UserRole, ROLE_PERMISSIONS } from '@/lib/types/auth';
 import { resolveLocationFromCode } from './warehouse-utils';
-import { fetchAllTursoMasterItems } from './turso-inventory-repository';
+import { fetchAllMasterItems } from './sqlite-inventory-repository';
 
 // Official commercial kitchen equipment categories in Bukan Baru Kitchen
 const CATEGORIES = [
@@ -209,13 +209,13 @@ export function getRawMasterInventory(): MasterInventoryItem[] {
 
 export async function getLiveMasterInventory(role?: UserRole): Promise<MasterInventoryItem[]> {
   try {
-    const items = await fetchAllTursoMasterItems(role);
+    const items = await fetchAllMasterItems(role);
     if (items && items.length > 0) {
       cachedInventory = items;
       return items;
     }
   } catch (err) {
-    console.warn('Turso live inventory fetch warning:', err);
+    console.warn('SQLite live inventory fetch warning:', err);
   }
 
   return getRawMasterInventory();

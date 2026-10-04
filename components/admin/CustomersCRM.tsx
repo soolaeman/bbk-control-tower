@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CustomerProfile } from '@/lib/repositories/turso-customers-repository';
+import { CustomerProfile } from '@/lib/repositories/sqlite-customers-repository';
 import { formatIDR } from '@/lib/repositories/warehouse-utils';
 import {
   Users,

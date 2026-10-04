@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Compute active permissions:
   // 1. ADMIN is always full control
   // 2. Direct session permissions embedded in NextAuth JWT (zero-delay on mount)
-  // 3. Dynamic permissionsMatrix[role] from Turso DB
+  // 3. Dynamic permissionsMatrix[role] from SQLite DB
   // 4. Static fallback or VIEWER default
   const sessionPermissions = (session?.user as any)?.permissions as RolePermissions | undefined;
 
