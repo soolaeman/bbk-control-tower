@@ -371,7 +371,7 @@ export async function unlockDispatchAcceptance(sjNumber: string): Promise<boolea
 }
 
 // ==========================================
-// NON-SKU TRANSACTIONS REPOSITORY
+// NON-SKU TRANSACTIONS REPOSITORY (SQLITE SSOT)
 // ==========================================
 
 export async function saveNonSkuTransaction(tx: any): Promise<void> {
@@ -460,21 +460,3 @@ export async function fetchNonSkuTransactions(): Promise<any[]> {
   }
 }
 
-// ==============================================================================
-// BACKWARD COMPATIBILITY ALIASES (Zero-Breaking Support)
-// ==============================================================================
-export const fetchTursoInvoices = fetchInvoices;
-export const saveTursoInvoice = saveInvoice;
-export const updateTursoInvoiceStatus = updateInvoiceStatus;
-export const deleteTursoInvoice = deleteInvoice;
-export const fetchTursoWarranties = fetchWarranties;
-export const getTursoWarrantyByNumber = getWarrantyByNumber;
-export const getTursoWarrantyByInvoice = getWarrantyByInvoice;
-export const saveTursoWarranty = saveWarranty;
-export const fetchTursoDispatches = fetchDispatches;
-export const getTursoDispatchBySjNumber = getDispatchBySjNumber;
-export const getTursoDispatchByInvoice = getDispatchByInvoice;
-export const saveTursoDispatch = saveDispatch;
-export const unlockTursoDispatchAcceptance = unlockDispatchAcceptance;
-export const saveTursoNonSkuTransaction = saveNonSkuTransaction;
-export const fetchTursoNonSkuTransactions = fetchNonSkuTransactions;

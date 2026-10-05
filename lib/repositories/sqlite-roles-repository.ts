@@ -352,9 +352,3 @@ export async function getUserWithRoleByEmail(email: string): Promise<{
     return null;
   }
 }
-
-// ==============================================================================
-// BACKWARD COMPATIBILITY ALIASES (Zero-Breaking Support)
-// ==============================================================================
-export const fetchTursoRoles = fetchRoles;
-export const fetchTursoUsers = fetchUsers;

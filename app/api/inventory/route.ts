@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { markUnitAsSold } from '@/lib/repositories/inventory-repository';
+import { queryInventory, markUnitAsSold } from '@/lib/repositories/inventory-repository';
 import { UserRole } from '@/lib/types/auth';
-import { queryInventory as querySqliteInventory, updateStockStatus } from '@/lib/repositories/sqlite-inventory-repository';
+import { querySqliteInventory, updateSqliteStockStatus } from '@/lib/repositories/sqlite-inventory-repository';
 import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const roleHeader = session.user.role as UserRole;
     const permissions = (session.user as any).permissions;
 
-    // Direct Query to Sovereign SQLite SSOT
+    // Direct Query to SQLite SSOT
     const result = await querySqliteInventory(
       {
         search,
@@ -91,31 +91,31 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'MARK_AS_SOLD' || status === 'SOLD' || action === 'UPDATE_STOCK_STATUS') {
-      const updateResult = await updateStockStatus(
+      const sqliteResult = await updateSqliteStockStatus(
         sku,
         (status as any) || 'SOLD',
         dealPrice ? Number(dealPrice) : undefined,
         notes
       );
-      if (!updateResult.success) {
-        return NextResponse.json({ error: updateResult.error }, { status: 404 });
+      if (!sqliteResult.success) {
+        return NextResponse.json({ error: sqliteResult.error }, { status: 404 });
       }
       return NextResponse.json({
         success: true,
-        item: updateResult.item,
-        message: `Unit ${sku} successfully updated to ${(status as any) || 'SOLD'} in Sovereign SQLite SSOT`,
+        item: sqliteResult.item,
+        message: `Unit ${sku} successfully updated to ${(status as any) || 'SOLD'} in SQLite SSOT`,
       });
     }
 
     if (action === 'MARK_AS_READY' || status === 'READY') {
-      const updateResult = await updateStockStatus(sku, 'READY', undefined, notes);
-      if (!updateResult.success) {
-        return NextResponse.json({ error: updateResult.error }, { status: 404 });
+      const sqliteResult = await updateSqliteStockStatus(sku, 'READY', undefined, notes);
+      if (!sqliteResult.success) {
+        return NextResponse.json({ error: sqliteResult.error }, { status: 404 });
       }
       return NextResponse.json({
         success: true,
-        item: updateResult.item,
-        message: `Unit ${sku} successfully set to READY in Sovereign SQLite SSOT`,
+        item: sqliteResult.item,
+        message: `Unit ${sku} successfully set to READY in SQLite SSOT`,
       });
     }
 

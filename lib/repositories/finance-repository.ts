@@ -18,19 +18,19 @@ import {
   saveNonSkuTransaction as saveSqliteNonSkuTransaction,
   fetchNonSkuTransactions as fetchSqliteNonSkuTransactions,
 } from './sqlite-finance-repository';
-import { updateStockStatus, fetchAllMasterItems } from './sqlite-inventory-repository';
+import { updateSqliteStockStatus as updateStockStatus, fetchAllMasterItems } from './sqlite-inventory-repository';
 import { upsertCustomer } from './sqlite-customers-repository';
 import { saveCashflowEntry } from './sqlite-cashflow-repository';
 import type { WarrantyRecord, WarrantyItemRecord, DeliveryDispatchRecord } from '@/lib/types/finance';
 
-// Clean Real Invoices store for BBKitchen (in-memory cache backed by Sovereign SQLite SSOT)
+// Clean Real Invoices store for BBKitchen (in-memory cache backed by SQLite SSOT)
 let cachedInvoices: Invoice[] = [];
 
 export async function getInvoices(): Promise<Invoice[]> {
   try {
-    const invoices = await fetchSqliteInvoices();
-    if (invoices && invoices.length > 0) {
-      cachedInvoices = invoices;
+    const sqliteInvoices = await fetchSqliteInvoices();
+    if (sqliteInvoices && sqliteInvoices.length > 0) {
+      cachedInvoices = sqliteInvoices;
       return cachedInvoices;
     }
   } catch (err) {
@@ -211,7 +211,7 @@ export async function createInvoice(invoiceData: Omit<Invoice, 'id'>): Promise<I
   // Trigger two-way deal flow reactivity
   await processInvoiceStateReactivity(newInvoice, newInvoice.status);
 
-  // Persist to Sovereign SQLite Database SSOT
+  // Persist to SQLite SSOT
   await saveSqliteInvoice(newInvoice).catch((e) =>
     console.warn('SQLite invoice save warning:', e)
   );
@@ -232,7 +232,7 @@ export async function updateInvoice(invoice: Invoice): Promise<Invoice> {
   // Trigger two-way deal flow reactivity
   await processInvoiceStateReactivity(invoice, invoice.status);
 
-  // Persist full update to Sovereign SQLite Database SSOT
+  // Persist full update to SQLite SSOT
   await saveSqliteInvoice(invoice).catch((e) =>
     console.warn('SQLite invoice update warning:', e)
   );
@@ -253,7 +253,7 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
     );
   }
 
-  // Persist status update to Sovereign SQLite Database
+  // Persist status update to SQLite
   await updateSqliteStatus(id, status).catch((e: any) =>
     console.warn('SQLite invoice status update warning:', e)
   );
@@ -306,7 +306,7 @@ export async function deleteInvoice(idOrNumber: string): Promise<boolean> {
     (inv) => inv.id !== idOrNumber && inv.invoiceNumber !== idOrNumber
   );
 
-  // Persist deletion to Sovereign SQLite Database SSOT
+  // Persist deletion to SQLite SSOT
   await deleteSqliteInv(idOrNumber).catch((e) =>
     console.warn('SQLite invoice deletion warning:', e)
   );
@@ -356,7 +356,7 @@ export async function getLiveClosingDealLedger(): Promise<{
   try {
     const rawItems = await fetchAllMasterItems();
     const soldItems = rawItems.filter((i) => i.STATUS_UNIT === 'SOLD');
-    // 1. Fetch Sovereign SQLite Inventory and Paid Invoices
+    // 1. Fetch SQLite Inventory and Paid Invoices
     const matchedSkusSet = new Set<string>();
     const bbkInvoiceDeals: ClosingDealItem[] = [];
     let totalPhysicalUnitsSold = 0;
@@ -704,7 +704,7 @@ export async function resolveNonSkuItem(params: {
     targetItem.sku = params.targetSku.toUpperCase();
     await updateInvoice(targetInv);
 
-    // 2. Mark the target SKU as SOLD in Sovereign SQLite Master Inventory
+    // 2. Mark the target SKU as SOLD in SQLite Master Inventory
     await updateStockStatus(
       params.targetSku,
       'SOLD',
@@ -730,7 +730,7 @@ export async function resolveNonSkuItem(params: {
     }
     await updateInvoice(targetInv);
 
-    // Save to Sovereign SQLite non_sku_transactions table (SSOT)
+    // Save to SQLite non_sku_transactions table (SSOT)
     const tx: NonSkuTransaction = {
       id: `nonsku_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       invoiceNumber: targetInv.invoiceNumber,

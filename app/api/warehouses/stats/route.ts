@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
     const client = getSqliteClient();
 
-    // 1. Hub breakdown aggregation query directly on Sovereign SQLite
+    // 1. Hub breakdown aggregation query directly on SQLite SSOT
     const hubSql = `
       SELECT 
         COALESCE(UPPER(asal_gudang), 'GK') as hubCode,

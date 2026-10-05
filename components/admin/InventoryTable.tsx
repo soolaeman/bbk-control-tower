@@ -232,7 +232,7 @@ export function InventoryTable() {
     }
 
     try {
-      // 2. Persist to Sovereign SQLite SSOT
+      // 2. Persist to SQLite SSOT
       const res = await fetch('/api/inventory', {
         method: 'POST',
         headers: {

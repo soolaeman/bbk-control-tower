@@ -62,7 +62,7 @@ export function WarehouseIntelligence({ onNavigateToInventory }: { onNavigateToI
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAgingOnly, setFilterAgingOnly] = useState(false);
 
-  // Fetch Live Aggregated Warehouse Data from Turso SQLite
+  // Fetch Live Aggregated Warehouse Data from SQLite SSOT
   const loadWarehouseStats = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -74,7 +74,7 @@ export function WarehouseIntelligence({ onNavigateToInventory }: { onNavigateToI
         if (data.deadStockItems) setDeadStockTopList(data.deadStockItems);
       }
     } catch (err) {
-      console.error('Failed to load warehouse stats from Turso:', err);
+      console.error('Failed to load warehouse stats from SQLite:', err);
     } finally {
       setIsLoading(false);
     }

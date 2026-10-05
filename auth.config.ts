@@ -32,7 +32,7 @@ export const authConfig = {
       // 1. Sovereign Owner bypass
       if (email === OWNER_EMAIL) return true;
 
-      // 2. Query Sovereign SQLite SSOT
+      // 2. Query SQLite DB SSOT
       try {
         const userRecord = await getUserWithRoleByEmail(email);
         if (userRecord?.user?.isActive) return true;

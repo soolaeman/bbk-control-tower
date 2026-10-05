@@ -88,10 +88,3 @@ export async function deleteCashflowEntry(id: string): Promise<boolean> {
     return false;
   }
 }
-
-// ==============================================================================
-// BACKWARD COMPATIBILITY ALIASES (Zero-Breaking Support)
-// ==============================================================================
-export const fetchTursoCashflowEntries = fetchCashflowEntries;
-export const saveTursoCashflowEntry = saveCashflowEntry;
-export const deleteTursoCashflowEntry = deleteCashflowEntry;

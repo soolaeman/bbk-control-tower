@@ -15,14 +15,14 @@ import {
 export * from '@/lib/types/cashflow';
 
 /**
- * Get all cashflow entries from Sovereign SQLite SSOT (Zero Google Sheets)
+ * Get all cashflow entries from SQLite SSOT (Zero Google Sheets)
  */
 export async function getCashflowEntries(): Promise<CashflowEntry[]> {
   return fetchCashflowEntries();
 }
 
 /**
- * Append a new cashflow entry into Sovereign SQLite SSOT
+ * Append a new cashflow entry into SQLite SSOT
  */
 export async function addCashflowEntry(entry: Omit<CashflowEntry, 'id' | 'rowIndex'>): Promise<{ success: boolean; entry?: CashflowEntry; error?: string }> {
   try {
@@ -34,7 +34,7 @@ export async function addCashflowEntry(entry: Omit<CashflowEntry, 'id' | 'rowInd
 }
 
 /**
- * Delete a cashflow entry by ID from Sovereign SQLite SSOT
+ * Delete a cashflow entry by ID from SQLite SSOT
  */
 export async function deleteCashflowEntry(idOrRowIndex: string | number): Promise<{ success: boolean; error?: string }> {
   try {

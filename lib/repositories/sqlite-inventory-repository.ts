@@ -15,10 +15,8 @@ const R2_BASE_URL = (
   'https://pub-946d1fe1a1b1461eb2cca6be4462ba11.r2.dev'
 ).replace(/\/$/, '');
 
-const SQLITE_AUTH_TOKEN = process.env.SQLITE_AUTH_TOKEN || undefined;
-
 function getDatabaseUrl(): string {
-  const envUrl = process.env.SQLITE_DATABASE_URL || process.env.DATABASE_URL;
+  const envUrl = process.env.DATABASE_URL;
   if (envUrl) {
     return envUrl;
   }
@@ -26,7 +24,9 @@ function getDatabaseUrl(): string {
     return 'file:data/bbk.db';
   }
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('fs');
 
     // 1. Holding Master SSOT (Local Dev)
@@ -63,7 +63,6 @@ export function getSqliteClient() {
   if (!clientInstance) {
     clientInstance = createClient({
       url: getDatabaseUrl(),
-      authToken: SQLITE_AUTH_TOKEN,
     });
   }
   return clientInstance;
@@ -192,7 +191,7 @@ export function mapRowToMasterItem(row: Record<string, any>): MasterInventoryIte
   };
 }
 
-export async function queryInventory(
+export async function querySqliteInventory(
   options: InventoryFilterOptions,
   role?: UserRole,
   permissions?: RolePermissions
@@ -354,7 +353,7 @@ export async function queryInventory(
   };
 }
 
-export async function updateStockStatus(
+export async function updateSqliteStockStatus(
   sku: string,
   newStatus: 'READY' | 'SOLD' | 'BOOKED' | UnitStatus,
   dealPrice?: number,
@@ -402,7 +401,7 @@ export async function updateStockStatus(
   }
 }
 
-// In-memory set of dismissed radar candidate IDs
+// In-memory set of dismissed radar candidate IDs (cleared upon service restart or persisted locally)
 const dismissedCandidates = new Set<string>();
 
 export interface SoldRadarCandidate {
@@ -585,12 +584,3 @@ export async function fetchAllMasterItems(role?: UserRole): Promise<MasterInvent
   }
 }
 
-// ==============================================================================
-// BACKWARD COMPATIBILITY ALIASES (Zero-Breaking Support)
-// ==============================================================================
-export const getTursoClient = getSqliteClient;
-export const queryTursoInventory = queryInventory;
-export const updateTursoStockStatus = updateStockStatus;
-export const getTursoTelegramSoldRadarCandidates = getTelegramSoldRadarCandidates;
-export const fetchAllTursoMasterItems = fetchAllMasterItems;
-export type TursoSoldRadarCandidate = SoldRadarCandidate;

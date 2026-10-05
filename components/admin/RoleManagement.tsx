@@ -65,7 +65,7 @@ export function RoleManagement() {
     try {
       setLoading(true);
       const res = await fetch('/api/roles');
-      if (!res.ok) throw new Error('Gagal memuat data dari SQLite SSOT');
+      if (!res.ok) throw new Error('Gagal memuat data dari SQLite DB');
       const data = await res.json();
       setRoles(data.roles || []);
       setUsers(data.users || []);
@@ -331,7 +331,7 @@ export function RoleManagement() {
     });
   };
 
-  // Save Permissions Matrix to SQLite SSOT with legacy sync bridge
+  // Save Permissions Matrix to SQLite DB with legacy sync bridge
   const handleSaveMatrix = async () => {
     try {
       setSavingMatrix(true);
@@ -365,7 +365,7 @@ export function RoleManagement() {
 
       setFeedback({
         type: 'success',
-        message: 'Matriks hak akses modular berhasil disimpan ke Sovereign SQLite SSOT!',
+        message: 'Matriks hak akses modular berhasil disimpan ke SQLite DB SSOT!',
       });
       notifyChange();
     } catch (err: any) {
@@ -404,7 +404,7 @@ export function RoleManagement() {
               </div>
               <p className="mt-1 text-xs leading-relaxed text-slate-400 max-w-2xl">
                 Owner-only control panel. Daftarkan email Google anggota tim, buat role custom baru, dan kelola izin
-                modul operasional secara real-time langsung tersimpan ke Sovereign Database.
+                modul operasional secara real-time langsung tersimpan ke Cloud Database.
               </p>
             </div>
           </div>
@@ -694,7 +694,7 @@ export function RoleManagement() {
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-white">Matriks Hak Akses Modul Operasional</h3>
               <p className="text-[11px] text-slate-400">
-                Atur akses Lihat (View) dan Edit per role. Tersimpan permanen di SQLite SSOT.
+                Atur akses Lihat (View) dan Edit per role. Tersimpan permanen di SQLite DB.
               </p>
             </div>
           </div>
@@ -820,7 +820,7 @@ export function RoleManagement() {
           </div>
         </div>
         <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">
-          * Catatan: Mengaktifkan Edit otomatis mengaktifkan Lihat. Mematikan Lihat otomatis mematikan Edit. Perubahan disimpan langsung ke Sovereign SQLite SSOT.
+          * Catatan: Mengaktifkan Edit otomatis mengaktifkan Lihat. Mematikan Lihat otomatis mematikan Edit. Perubahan disimpan langsung ke SQLite DB SSOT.
         </p>
       </section>
 
